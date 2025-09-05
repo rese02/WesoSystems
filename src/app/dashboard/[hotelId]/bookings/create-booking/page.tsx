@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/dialog"
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 
 const createBookingSchema = z.object({
   firstName: z.string().min(1, { message: "Vorname ist ein Pflichtfeld." }),
@@ -57,7 +57,9 @@ const createBookingSchema = z.object({
 
 type CreateBookingFormValues = z.infer<typeof createBookingSchema>;
 
-export default function CreateBookingPage({ params }: { params: { hotelId: string } }) {
+export default function CreateBookingPage() {
+  const params = useParams();
+  const hotelId = params.hotelId as string;
   const [isLoading, setIsLoading] = React.useState(false);
   const [generatedLink, setGeneratedLink] = React.useState<string | null>(null);
   const [isCopied, setIsCopied] = React.useState(false);
@@ -70,7 +72,7 @@ export default function CreateBookingPage({ params }: { params: { hotelId: strin
 
   const onSubmit = async (data: CreateBookingFormValues) => {
     setIsLoading(true);
-    const result = await createBookingWithLink(params.hotelId, {
+    const result = await createBookingWithLink(hotelId, {
       firstName: data.firstName,
       lastName: data.lastName,
       email: data.email,
@@ -102,13 +104,13 @@ export default function CreateBookingPage({ params }: { params: { hotelId: strin
 
   const handleDialogClose = () => {
     setGeneratedLink(null);
-    router.push(`/dashboard/${params.hotelId}/bookings`);
+    router.push(`/dashboard/${hotelId}/bookings`);
   }
 
   return (
     <>
       <div className="flex items-center gap-4 mb-6">
-        <Link href={`/dashboard/${params.hotelId}/bookings`}>
+        <Link href={`/dashboard/${hotelId}/bookings`}>
             <Button variant="outline" size="icon">
                 <ArrowLeft className="h-4 w-4" />
             </Button>
