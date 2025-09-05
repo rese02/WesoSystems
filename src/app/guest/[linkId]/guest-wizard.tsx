@@ -175,7 +175,7 @@ export function GuestWizard({ booking, hotel }: { booking: Booking; hotel: Hotel
                 <BookingSummary />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                   <FormField control={form.control} name="guestData.firstName" render={({ field }) => <FormItem><FormLabel>{t.firstName}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
-                  <FormField control={form.control} name="guestData.lastName" render={({ field }) => <FormItem><FormLabel>{t.lastName}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormMessage>} />
+                  <FormField control={form.control} name="guestData.lastName" render={({ field }) => <FormItem><FormLabel>{t.lastName}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
                   <FormField control={form.control} name="guestData.email" render={({ field }) => <FormItem><FormLabel>{t.email}</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>} />
                   <FormField control={form.control} name="guestData.phone" render={({ field }) => <FormItem><FormLabel>{t.phone}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
                   <FormField control={form.control} name="guestData.age" render={({ field }) => <FormItem><FormLabel>{t.age}</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? null : +e.target.value)} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
@@ -183,7 +183,7 @@ export function GuestWizard({ booking, hotel }: { booking: Booking; hotel: Hotel
                      <FormField control={form.control} name="guestData.idFrontFile" render={({ field }) => <FileUploadField field={field} name={t.idFront} t={t} />} />
                      <FormField control={form.control} name="guestData.idBackFile" render={({ field }) => <FileUploadField field={field} name={t.idBack} t={t} />} />
                   </div>
-                  <FormField control={form.control} name="guestData.notes" render={({ field }) => <FormItem className="md:col-span-2"><FormLabel>{t.notes}</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormMessage>} />
+                  <FormField control={form.control} name="guestData.notes" render={({ field }) => <FormItem className="md:col-span-2"><FormLabel>{t.notes}</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
                 </div>
               </div>
             )}
