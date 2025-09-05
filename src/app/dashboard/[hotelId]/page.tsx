@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { Button } from "@/components/ui/button";
 import {
   Users,
   DollarSign,
@@ -88,9 +89,9 @@ export default async function DashboardPage({ params }: { params: { hotelId: str
                     {format(parseISO(booking.createdAt), 'dd. MMMM yyyy, HH:mm', { locale: de })}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link href={`/dashboard/${params.hotelId}/bookings/${booking.id}`}>
-                      <Button variant="ghost" size="sm">Ansehen</Button>
-                    </Link>
+                    <Button asChild variant="ghost" size="sm">
+                        <Link href={`/dashboard/${params.hotelId}/bookings/${booking.id}`}>Ansehen</Link>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
