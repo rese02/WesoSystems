@@ -1,111 +1,44 @@
-
-import type { Booking, Hotel, GuestLink, BookingStatus, GuestData, Companion, PaymentDetails, RoomConfiguration } from './types';
-import { add, format, formatISO, parseISO } from 'date-fns';
+import { db } from './firebase';
+import { collection, query as firestoreQuery, where, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, limit } from 'firebase/firestore';
+import type { Booking, Hotel, BookingStatus, GuestData, Companion, PaymentDetails, RoomConfiguration } from './types';
+import { formatISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
-
-let hotels: Hotel[] = [
+// HINWEIS: Die Hotel-Daten werden vorerst hartcodiert, da es keine UI zur Verwaltung gibt.
+const hotels: Hotel[] = [
   { id: 'weso-hotel-1', name: 'WesoMountain Resort' },
 ];
 
-let bookings: Booking[] = [
-  {
-    id: 'booking-1',
-    hotelId: 'weso-hotel-1',
-    status: 'Confirmed',
-    bookingToken: 'token-confirmed-123',
-    guestInfo: {
-        firstName: 'Alice',
-        lastName: 'Johnson',
-    },
-    bookingPeriod: {
-        checkInDate: formatISO(new Date(), { representation: 'date' }),
-        checkOutDate: formatISO(add(new Date(), { days: 5 }), { representation: 'date' }),
-    },
-    coreData: {
-        catering: 'Frühstück',
-        totalPrice: 1250.00,
-        guestFormLanguage: 'de',
-    },
-    rooms: [{
-        roomType: 'Superior',
-        adults: 2,
-        children: 0,
-        infants: 0,
-        childrenAges: null,
-    }],
-    internalNotes: 'VIP Guest, requires late checkout.',
-    guestData: {
-      firstName: 'Alice',
-      lastName: 'Johnson',
-      email: 'alice@example.com',
-      phone: '123-456-7890',
-      age: 34,
-      idFrontUrl: '#',
-      idBackUrl: '#',
-      notes: 'Looking forward to our stay!',
-    },
-    companions: [],
-    paymentDetails: {
-        paymentOption: 'full',
-        amountDue: 1250.00,
-        paymentProofUrl: '#',
-    },
-    createdAt: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
-  },
-  {
-    id: 'booking-2',
-    hotelId: 'weso-hotel-1',
-    status: 'Pending Guest Information',
-    bookingToken: 'token-pending-456',
-    guestInfo: {
-        firstName: 'Bob',
-        lastName: 'Smith',
-    },
-    bookingPeriod: {
-        checkInDate: formatISO(add(new Date(), { days: 1 }), { representation: 'date' }),
-        checkOutDate: formatISO(add(new Date(), { days: 3 }), { representation: 'date' }),
-    },
-    coreData: {
-        catering: 'Keine',
-        totalPrice: 450.00,
-        guestFormLanguage: 'en',
-    },
-    rooms: [{
-        roomType: 'Standard',
-        adults: 2,
-        children: 0,
-        infants: 0,
-        childrenAges: null,
-    }],
-    internalNotes: 'Awaiting payment confirmation.',
-    guestData: null,
-    companions: [],
-    paymentDetails: null,
-    createdAt: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString(),
-  },
-];
-
-
-// Simulate DB operations with latency
-const dbLatency = () => new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
-
 export async function getHotelById(hotelId: string): Promise<Hotel | undefined> {
-  await dbLatency();
   return hotels.find(h => h.id === hotelId);
 }
 
+// Wandelt ein Firestore-Dokument in ein Booking-Objekt um
+const toBookingObject = (doc: any): Booking => {
+    const data = doc.data();
+    return {
+        id: doc.id,
+        ...data,
+        // Konvertiere Timestamp-Objekte sicher in ISO-Strings
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+    } as Booking;
+}
+
 export async function getBookingsByHotelId(hotelId: string, { query, status }: { query?: string, status?: string }): Promise<Booking[]> {
-  await dbLatency();
-  let hotelBookings = bookings.filter(b => b.hotelId === hotelId);
+  const bookingsRef = collection(db, 'bookings');
+  
+  let q = firestoreQuery(bookingsRef, where('hotelId', '==', hotelId), orderBy('createdAt', 'desc'));
 
   if (status && status !== 'all') {
-    hotelBookings = hotelBookings.filter(b => b.status === status);
+    q = firestoreQuery(q, where('status', '==', status));
   }
+  
+  const querySnapshot = await getDocs(q);
+  let bookings = querySnapshot.docs.map(toBookingObject);
 
   if (query) {
     const lowerCaseQuery = query.toLowerCase();
-    hotelBookings = hotelBookings.filter(b => 
+    bookings = bookings.filter(b => 
       b.guestInfo.firstName.toLowerCase().includes(lowerCaseQuery) ||
       b.guestInfo.lastName.toLowerCase().includes(lowerCaseQuery) ||
       (b.guestData?.email || '').toLowerCase().includes(lowerCaseQuery) ||
@@ -113,17 +46,24 @@ export async function getBookingsByHotelId(hotelId: string, { query, status }: {
     );
   }
   
-  return hotelBookings.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return bookings;
 }
 
 export async function getBookingById(bookingId: string): Promise<Booking | undefined> {
-  await dbLatency();
-  return bookings.find(b => b.id === bookingId);
+  const bookingDoc = await getDoc(doc(db, 'bookings', bookingId));
+  if (!bookingDoc.exists()) {
+    return undefined;
+  }
+  return toBookingObject(bookingDoc);
 }
 
 export async function getBookingByToken(token: string): Promise<Booking | undefined> {
-    await dbLatency();
-    return bookings.find(b => b.bookingToken === token);
+  const q = firestoreQuery(collection(db, 'bookings'), where('bookingToken', '==', token));
+  const querySnapshot = await getDocs(q);
+  if (querySnapshot.empty) {
+      return undefined;
+  }
+  return toBookingObject(querySnapshot.docs[0]);
 }
 
 type CreateBookingData = {
@@ -135,15 +75,10 @@ type CreateBookingData = {
 }
 
 export async function createNewBooking(hotelId: string, data: CreateBookingData): Promise<Booking> {
-    await dbLatency();
-    const newBookingId = `booking-${Date.now()}`;
-    const newBookingToken = uuidv4();
-
-    const newBooking: Booking = {
-        id: newBookingId,
+    const newBookingData = {
         hotelId,
-        status: 'Pending Guest Information',
-        bookingToken: newBookingToken,
+        status: 'Pending Guest Information' as BookingStatus,
+        bookingToken: uuidv4(),
         guestInfo: data.guestInfo,
         bookingPeriod: {
             checkInDate: formatISO(data.bookingPeriod.from, { representation: 'date' }),
@@ -155,23 +90,22 @@ export async function createNewBooking(hotelId: string, data: CreateBookingData)
         guestData: null,
         companions: [],
         paymentDetails: null,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(),
     };
     
-    bookings.unshift(newBooking);
+    const docRef = await addDoc(collection(db, 'bookings'), newBookingData);
     
-    return newBooking;
+    return {
+        id: docRef.id,
+        ...newBookingData,
+        createdAt: newBookingData.createdAt.toISOString()
+    };
 }
 
 export async function updateBooking(bookingId: string, hotelId: string, data: CreateBookingData): Promise<Booking | undefined> {
-    await dbLatency();
-    const bookingIndex = bookings.findIndex(b => b.id === bookingId && b.hotelId === hotelId);
-    if (bookingIndex === -1) return undefined;
-
-    const existingBooking = bookings[bookingIndex];
-
-    const updatedBooking: Booking = {
-        ...existingBooking,
+    const bookingRef = doc(db, 'bookings', bookingId);
+    
+    const updatedData = {
         guestInfo: data.guestInfo,
         bookingPeriod: {
             checkInDate: formatISO(data.bookingPeriod.from, { representation: 'date' }),
@@ -182,49 +116,49 @@ export async function updateBooking(bookingId: string, hotelId: string, data: Cr
         internalNotes: data.internalNotes,
     };
 
-    bookings[bookingIndex] = updatedBooking;
-    return updatedBooking;
+    await updateDoc(bookingRef, updatedData);
+    
+    return getBookingById(bookingId);
 }
 
-export async function updateBookingWithGuestData(bookingId: string, hotelId: string, guestData: GuestData, companions: Companion[], paymentDetails: PaymentDetails): Promise<Booking | undefined> {
-    await dbLatency();
-    const bookingIndex = bookings.findIndex(b => b.id === bookingId);
-    if (bookingIndex === -1) return undefined;
+export async function updateBookingWithGuestData(bookingId: string, guestData: GuestData, companions: Companion[], paymentDetails: PaymentDetails): Promise<Booking | undefined> {
+    const bookingRef = doc(db, 'bookings', bookingId);
 
-    bookings[bookingIndex].guestData = guestData;
-    bookings[bookingIndex].companions = companions;
-    bookings[bookingIndex].paymentDetails = paymentDetails;
-    bookings[bookingIndex].status = 'Confirmed';
-
-    return bookings[bookingIndex];
+    const updateData = {
+        guestData,
+        companions,
+        paymentDetails,
+        status: 'Confirmed' as BookingStatus,
+    };
+    
+    await updateDoc(bookingRef, updateData);
+    
+    return getBookingById(bookingId);
 }
 
 export async function getDashboardStats(hotelId: string) {
-    await dbLatency();
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const firstDayOfMonth = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd');
+    const today = formatISO(new Date(), { representation: 'date' });
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
-    const hotelBookings = bookings.filter(b => b.hotelId === hotelId);
+    const bookingsRef = collection(db, 'bookings');
+    const q = firestoreQuery(bookingsRef, where('hotelId', '==', hotelId));
+    const querySnapshot = await getDocs(q);
+    const allBookings = querySnapshot.docs.map(toBookingObject);
 
-    const todaysArrivals = hotelBookings.filter(b => b.bookingPeriod.checkInDate === today && (b.status === 'Confirmed' || b.status === 'CheckedIn')).length;
-    const todaysDepartures = hotelBookings.filter(b => b.bookingPeriod.checkOutDate === today && b.status === 'CheckedIn').length;
+    const todaysArrivals = allBookings.filter(b => b.bookingPeriod.checkInDate === today && (b.status === 'Confirmed' || b.status === 'CheckedIn')).length;
+    const todaysDepartures = allBookings.filter(b => b.bookingPeriod.checkOutDate === today && b.status === 'CheckedIn').length;
     
-    const revenueThisMonth = hotelBookings.reduce((acc, b) => {
+    const revenueThisMonth = allBookings.reduce((acc, b) => {
         const bookingDate = new Date(b.createdAt);
-        const firstOfMonthDate = new Date(firstDayOfMonth);
-        if (bookingDate >= firstOfMonthDate && (b.status === 'Confirmed' || b.status === 'CheckedIn')) {
+        if (bookingDate >= startOfMonth && (b.status === 'Confirmed' || b.status === 'CheckedIn')) {
             return acc + b.coreData.totalPrice;
         }
         return acc;
     }, 0);
 
-    const newBookingsThisMonth = hotelBookings.filter(b => {
-        const bookingDate = new Date(b.createdAt);
-        const firstOfMonthDate = new Date(firstDayOfMonth);
-        return bookingDate >= firstOfMonthDate;
-    }).length;
+    const newBookingsThisMonth = allBookings.filter(b => new Date(b.createdAt) >= startOfMonth).length;
 
-    const recentActivities = hotelBookings.slice(0, 5);
+    const recentActivities = allBookings.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
     
     return {
         todaysArrivals,
@@ -235,12 +169,7 @@ export async function getDashboardStats(hotelId: string) {
     }
 }
 
-export async function deleteBookingById(bookingId: string, hotelId: string): Promise<boolean> {
-    await dbLatency();
-    const index = bookings.findIndex(b => b.id === bookingId && b.hotelId === hotelId);
-    if (index > -1) {
-        bookings.splice(index, 1);
-        return true;
-    }
-    return false;
+export async function deleteBookingById(bookingId: string): Promise<void> {
+    const bookingRef = doc(db, 'bookings', bookingId);
+    await deleteDoc(bookingRef);
 }

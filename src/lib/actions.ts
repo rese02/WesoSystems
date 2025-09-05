@@ -4,22 +4,24 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { 
-    createNewBooking as dbCreateNewBooking, 
+    createNewBooking,
     updateBookingWithGuestData, 
     getHotelById, 
     deleteBookingById as dbDeleteBookingById, 
     getBookingById, 
     updateBooking as dbUpdateBooking 
 } from './data';
-import type { Booking, GuestData, Companion, PaymentDetails, RoomConfiguration, CateringOption, RoomType } from './types';
+import type { Booking, GuestData, Companion, PaymentDetails } from './types';
 import { generateConfirmationEmail } from '@/ai/flows/ai-powered-email-confirmation';
-// Assume a function to upload files to a storage service
-// In a real app, this would upload to Firebase Storage, S3, etc.
-async function uploadFile(file: File): Promise<string> {
-    // This is a mock upload function.
-    console.log(`Uploading file: ${file.name}`);
-    await new Promise(res => setTimeout(res, 500)); // Simulate upload delay
-    return `/uploads/mock/${Date.now()}-${file.name}`;
+import { storage } from './firebase'; // Firebase Storage importieren
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+
+// Echte Upload-Funktion, die Firebase Storage nutzt
+async function uploadFile(file: File, bookingId: string): Promise<string> {
+    const storageRef = ref(storage, `bookings/${bookingId}/${Date.now()}-${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return downloadURL;
 }
 
 const roomSchema = z.object({
@@ -55,7 +57,7 @@ const bookingFormSchema = z.object({
 export async function createBooking(hotelId: string, data: unknown) {
   try {
     const validatedData = bookingFormSchema.parse(data);
-    const newBooking = await dbCreateNewBooking(hotelId, validatedData);
+    const newBooking = await createNewBooking(hotelId, validatedData);
     
     revalidatePath(`/dashboard/${hotelId}/bookings`);
 
@@ -128,15 +130,15 @@ export async function submitGuestData(bookingId: string, data: unknown) {
         const booking = await getBookingById(bookingId);
         if (!booking) throw new Error("Booking not found");
 
-        // 1. Upload all files
-        const idFrontUrl = await uploadFile(validatedData.guestData.idFrontFile);
-        const idBackUrl = await uploadFile(validatedData.guestData.idBackFile);
-        const paymentProofUrl = await uploadFile(validatedData.paymentProofFile);
+        // 1. Upload all files to Firebase Storage
+        const idFrontUrl = await uploadFile(validatedData.guestData.idFrontFile, bookingId);
+        const idBackUrl = await uploadFile(validatedData.guestData.idBackFile, bookingId);
+        const paymentProofUrl = await uploadFile(validatedData.paymentProofFile, bookingId);
 
         const companionUploads = await Promise.all(validatedData.companions.map(async (comp) => ({
             ...comp,
-            idFrontUrl: await uploadFile(comp.idFrontFile),
-            idBackUrl: await uploadFile(comp.idBackFile),
+            idFrontUrl: await uploadFile(comp.idFrontFile, bookingId),
+            idBackUrl: await uploadFile(comp.idBackFile, bookingId),
         })));
 
         // 2. Prepare data for DB
@@ -165,7 +167,7 @@ export async function submitGuestData(bookingId: string, data: unknown) {
         };
 
         // 3. Update booking in DB
-        const updatedBooking = await updateBookingWithGuestData(bookingId, booking.hotelId, guestDataForDb, companionsForDb, paymentDetailsForDb);
+        const updatedBooking = await updateBookingWithGuestData(bookingId, guestDataForDb, companionsForDb, paymentDetailsForDb);
 
         if (!updatedBooking) {
             throw new Error('Booking could not be updated');
@@ -188,18 +190,18 @@ export async function submitGuestData(bookingId: string, data: unknown) {
             specialRequests: updatedBooking.guestData?.notes || '',
         });
 
-        console.log("---- AI-Generated Email ----");
+        console.log("---- AI-Generated Email Sent (Simulation) ----");
+        console.log("To:", updatedBooking.guestData?.email);
         console.log("Subject:", emailContent.emailSubject);
-        console.log("Body:", emailContent.emailBody);
-        console.log("--------------------------");
-
+        console.log("------------------------------------------");
+        
         revalidatePath(`/dashboard/${updatedBooking.hotelId}/bookings`);
         revalidatePath(`/dashboard/${updatedBooking.hotelId}/bookings/${bookingId}`);
         revalidatePath(`/guest/${updatedBooking.bookingToken}/thank-you`);
 
         return { success: true };
     } catch (error) {
-        console.error(error);
+        console.error("Error in submitGuestData:", error);
          if (error instanceof z.ZodError) {
             return { success: false, error: "Validierungsfehler: " + error.errors.map(e => e.path.join('.') + ': ' + e.message).join(', ') };
         }
@@ -210,13 +212,43 @@ export async function submitGuestData(bookingId: string, data: unknown) {
     }
 }
 
+// Helper to delete a file from Firebase Storage from a URL
+async function deleteFileFromStorage(fileUrl: string) {
+    if (!fileUrl || !fileUrl.startsWith('https://firebasestorage.googleapis.com')) return;
+    try {
+        const fileRef = ref(storage, fileUrl);
+        await deleteObject(fileRef);
+    } catch (error: any) {
+        // Ignore "object not found" errors, as they might have been deleted already
+        if (error.code !== 'storage/object-not-found') {
+            console.error("Error deleting file from storage:", error);
+        }
+    }
+}
 
 export async function deleteBookingByIdAction(bookingId: string, hotelId: string) {
     try {
-        const success = await dbDeleteBookingById(bookingId, hotelId);
-        if (!success) {
-            throw new Error("Buchung nicht gefunden oder konnte nicht gelöscht werden.");
+        // First, get the booking to find associated files
+        const booking = await getBookingById(bookingId);
+        
+        if (booking) {
+            // Delete main guest files
+            if (booking.guestData?.idFrontUrl) await deleteFileFromStorage(booking.guestData.idFrontUrl);
+            if (booking.guestData?.idBackUrl) await deleteFileFromStorage(booking.guestData.idBackUrl);
+            
+            // Delete companion files
+            for (const companion of booking.companions) {
+                if (companion.idFrontUrl) await deleteFileFromStorage(companion.idFrontUrl);
+                if (companion.idBackUrl) await deleteFileFromStorage(companion.idBackUrl);
+            }
+
+            // Delete payment proof
+            if (booking.paymentDetails?.paymentProofUrl) await deleteFileFromStorage(booking.paymentDetails.paymentProofUrl);
         }
+
+        // After deleting files, delete the Firestore document
+        await dbDeleteBookingById(bookingId);
+        
         revalidatePath(`/dashboard/${hotelId}/bookings`);
         return { success: true };
     } catch(error: any) {
