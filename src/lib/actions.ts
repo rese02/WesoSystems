@@ -67,9 +67,11 @@ export async function createBooking(hotelId: string, data: unknown) {
     };
   } catch (error) {
     console.error("Error in createBooking action:", error);
+    
     if (error instanceof z.ZodError) {
         return { success: false, error: "Validierungsfehler: " + error.errors.map(e => e.path.join('.') + ': ' + e.message).join(', ') };
     }
+    
     const errorMessage = error instanceof Error ? error.message : 'Ein unbekannter Fehler ist aufgetreten.';
     return {
       success: false,
@@ -254,7 +256,9 @@ export async function deleteBookingByIdAction(bookingId: string, hotelId: string
         
         revalidatePath(`/dashboard/${hotelId}/bookings`);
         return { success: true };
-    } catch(error: any) {
-        return { success: false, error: error.message };
+    } catch(e) {
+      console.error('Fehler beim Löschen der Buchung:', e);
+      const error = e instanceof Error ? e.message : "Ein unbekannter Fehler ist aufgetreten.";
+      return { success: false, error };
     }
 }
