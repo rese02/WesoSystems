@@ -1,3 +1,4 @@
+
 import { getDashboardStats } from "@/lib/data";
 import type { Booking } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,15 +9,12 @@ import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Button } from "@/components/ui/button";
 import {
-  Users,
-  DollarSign,
   CalendarPlus,
-  ArrowRightLeft,
   CalendarCheck,
   CalendarX,
-  BedDouble,
   CircleDollarSign
 } from 'lucide-react';
+import type { BookingStatus } from "@/lib/types";
 
 export const dynamic = 'force-dynamic';
 
@@ -30,13 +28,20 @@ export default async function DashboardPage({ params }: { params: { hotelId: str
     { title: "Neue Buchungen (Monat)", value: stats.newBookingsThisMonth, icon: CalendarPlus, color: "text-purple-600" },
   ];
 
-  const statusColors: { [key: string]: string } = {
+  const statusColors: { [key in BookingStatus]?: string } = {
+    'Pending Guest Information': 'bg-blue-100 text-blue-800 border-blue-200',
     Confirmed: 'bg-green-100 text-green-800 border-green-200',
-    PendingPayment: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    Sent: 'bg-blue-100 text-blue-800 border-blue-200',
     Cancelled: 'bg-red-100 text-red-800 border-red-200',
     CheckedIn: 'bg-indigo-100 text-indigo-800 border-indigo-200',
     CheckedOut: 'bg-gray-100 text-gray-800 border-gray-200'
+  };
+
+  const statusTranslations: { [key in BookingStatus]?: string } = {
+    'Pending Guest Information': 'Wartet auf Gast',
+    Confirmed: 'Bestätigt',
+    Cancelled: 'Storniert',
+    CheckedIn: 'Eingecheckt',
+    CheckedOut: 'Ausgecheckt'
   };
 
   return (
@@ -74,15 +79,15 @@ export default async function DashboardPage({ params }: { params: { hotelId: str
               {stats.recentActivities.map((booking: Booking) => (
                 <TableRow key={booking.id}>
                   <TableCell>
-                    <div className="font-medium">{booking.prefillData.firstName} {booking.prefillData.lastName}</div>
-                    <div className="text-sm text-muted-foreground hidden md:inline">{booking.prefillData.email}</div>
+                    <div className="font-medium">{booking.guestInfo.firstName} {booking.guestInfo.lastName}</div>
+                    <div className="text-sm text-muted-foreground hidden md:inline">{booking.guestData?.email}</div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    {format(parseISO(booking.prefillData.checkInDate), 'dd. MMM')} - {format(parseISO(booking.prefillData.checkOutDate), 'dd. MMM yyyy')}
+                    {format(parseISO(booking.bookingPeriod.checkInDate), 'dd. MMM')} - {format(parseISO(booking.bookingPeriod.checkOutDate), 'dd. MMM yyyy')}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusColors[booking.status]}>
-                      {booking.status === 'PendingPayment' ? 'Ausstehend' : booking.status === 'Sent' ? 'Gesendet' : booking.status === 'Confirmed' ? 'Bestätigt' : booking.status === 'Cancelled' ? 'Storniert' : booking.status}
+                       {statusTranslations[booking.status] || booking.status}
                     </Badge>
                   </TableCell>
                    <TableCell className="hidden lg:table-cell">

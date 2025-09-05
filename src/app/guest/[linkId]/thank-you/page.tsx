@@ -1,4 +1,5 @@
-import { getLinkById, getBookingById, getHotelById } from '@/lib/data';
+
+import { getBookingByToken, getHotelById } from '@/lib/data';
 import { notFound, redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,21 +10,23 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 export const dynamic = 'force-dynamic';
 
 export default async function ThankYouPage({ params }: { params: { linkId: string } }) {
-  const link = await getLinkById(params.linkId);
-  // Allow access only if the link has been used
-  if (!link || link.status !== 'Used') {
-    redirect(`/guest/${params.linkId}`);
+  const bookingToken = params.linkId;
+  const booking = await getBookingByToken(bookingToken);
+  
+  if (!booking || booking.status !== 'Confirmed') {
+    // If booking is not confirmed, redirect to the wizard.
+    // This prevents accessing thank you page before submission.
+    redirect(`/guest/${bookingToken}`);
   }
 
-  const booking = await getBookingById(link.bookingId, link.hotelId);
-  const hotel = await getHotelById(link.hotelId);
+  const hotel = await getHotelById(booking.hotelId);
 
-  if (!booking || !hotel || !booking.guestData) {
+  if (!hotel || !booking.guestData) {
     notFound();
   }
 
-  const checkIn = parseISO(booking.prefillData.checkInDate);
-  const checkOut = parseISO(booking.prefillData.checkOutDate);
+  const checkIn = parseISO(booking.bookingPeriod.checkInDate);
+  const checkOut = parseISO(booking.bookingPeriod.checkOutDate);
   const nights = differenceInDays(checkOut, checkIn);
 
   return (
@@ -32,7 +35,7 @@ export default async function ThankYouPage({ params }: { params: { linkId: strin
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
           <CheckCircle2 className="h-6 w-6 text-green-600" />
         </div>
-        <CardTitle className="mt-4 text-2xl font-headline">Vielen Dank für Ihre Buchung!</CardTitle>
+        <CardTitle className="mt-4 text-2xl font-headline">Vielen Dank!</CardTitle>
         <CardDescription>
           Ihre Daten wurden erfolgreich übermittelt. Sie erhalten in Kürze eine Bestätigungs-E-Mail.
         </CardDescription>
@@ -44,7 +47,7 @@ export default async function ThankYouPage({ params }: { params: { linkId: strin
             <div><p className="text-sm font-medium text-muted-foreground">Buchungsnummer</p><p>#{booking.id.split('-')[1]}</p></div>
             <div><p className="text-sm font-medium text-muted-foreground">Name</p><p>{booking.guestData.firstName} {booking.guestData.lastName}</p></div>
             <div><p className="text-sm font-medium text-muted-foreground">E-Mail</p><p>{booking.guestData.email}</p></div>
-            <div><p className="text-sm font-medium text-muted-foreground">Zimmer</p><p>{booking.prefillData.roomType}</p></div>
+            <div><p className="text-sm font-medium text-muted-foreground">Zimmer</p><p>{booking.rooms.map(r => r.roomType).join(', ')}</p></div>
             <div><p className="text-sm font-medium text-muted-foreground">Aufenthalt</p><p>{nights} Nächte</p></div>
             <div className="sm:col-span-2"><p className="text-sm font-medium text-muted-foreground">Zeitraum</p><p>{format(checkIn, 'dd. MMMM yyyy')} bis {format(checkOut, 'dd. MMMM yyyy')}</p></div>
         </div>

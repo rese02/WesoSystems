@@ -1,38 +1,61 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createNewBooking as dbCreateNewBooking, updateBookingWithGuestData as dbUpdateBooking, getHotelById, deleteBookingById as dbDeleteBookingById } from './data';
-import type { Booking } from './types';
+import { createNewBooking as dbCreateNewBooking, updateBookingWithGuestData as dbUpdateBooking, getHotelById, deleteBookingById as dbDeleteBookingById, getBookingById } from './data';
+import type { Booking, GuestData, Companion, PaymentDetails, RoomConfiguration } from './types';
 import { generateConfirmationEmail } from '@/ai/flows/ai-powered-email-confirmation';
+// Assume a function to upload files to a storage service
+// In a real app, this would upload to Firebase Storage, S3, etc.
+async function uploadFile(file: File): Promise<string> {
+    // This is a mock upload function.
+    console.log(`Uploading file: ${file.name}`);
+    await new Promise(res => setTimeout(res, 500)); // Simulate upload delay
+    return `/uploads/mock/${Date.now()}-${file.name}`;
+}
 
 const createBookingSchema = z.object({
-  firstName: z.string(),
-  lastName: z.string(),
-  email: z.string().email(),
-  roomType: z.string(),
-  checkInDate: z.string(),
-  checkOutDate: z.string(),
+  guestInfo: z.object({
+    firstName: z.string().min(1, "Vorname ist erforderlich"),
+    lastName: z.string().min(1, "Nachname ist erforderlich"),
+  }),
+  bookingPeriod: z.object({
+      from: z.date({ required_error: "Anreisedatum ist erforderlich." }),
+      to: z.date({ required_error: "Abreisedatum ist erforderlich." }),
+  }),
+  coreData: z.object({
+      catering: z.enum(["Keine", "Frühstück", "Halbpension", "Vollpension"]),
+      totalPrice: z.coerce.number().positive("Preis muss positiv sein."),
+      guestFormLanguage: z.enum(['de', 'it', 'en']),
+  }),
+  rooms: z.array(z.object({
+      roomType: z.enum(["Standard", "Familienzimmer", "Komfort", "Superior", "Economy"]),
+      adults: z.coerce.number().min(1, "Mindestens ein Erwachsener pro Zimmer."),
+      children: z.coerce.number().min(0),
+      infants: z.coerce.number().min(0),
+      childrenAges: z.string().nullable(),
+  })).min(1, "Mindestens ein Zimmer muss hinzugefügt werden."),
+  internalNotes: z.string().nullable(),
 });
 
-export async function createBookingWithLink(
-  hotelId: string,
-  prefillData: z.infer<typeof createBookingSchema>,
-  internalNotes: string | null
-) {
+
+export async function createBooking(hotelId: string, data: unknown) {
   try {
-    const validatedData = createBookingSchema.parse(prefillData);
-    const newBooking = await dbCreateNewBooking(hotelId, validatedData, internalNotes);
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
+    const validatedData = createBookingSchema.parse(data);
+    const newBooking = await dbCreateNewBooking(hotelId, validatedData);
     
     revalidatePath(`/dashboard/${hotelId}/bookings`);
 
     return {
       success: true,
-      link: `${baseUrl}/guest/${newBooking.linkId}`,
+      booking: newBooking,
     };
   } catch (error) {
     console.error(error);
+    if (error instanceof z.ZodError) {
+        return { success: false, error: "Validierungsfehler: " + error.errors.map(e => e.path.join('.') + ': ' + e.message).join(', ') };
+    }
     return {
       success: false,
       error: 'Fehler beim Erstellen der Buchung.',
@@ -40,44 +63,74 @@ export async function createBookingWithLink(
   }
 }
 
-const guestSchema = z.object({
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  email: z.string().email(),
-  address: z.string().min(1),
-  city: z.string().min(1),
-  zip: z.string().min(1),
-  country: z.string().min(1),
-  phone: z.string().min(1),
-  idFile: z.any().optional(),
+const guestWizardSchema = z.object({
+  guestData: z.object({
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    email: z.string().email(),
+    phone: z.string().min(1),
+    age: z.number().nullable(),
+    idFrontFile: z.custom<File>(),
+    idBackFile: z.custom<File>(),
+    notes: z.string().nullable(),
+  }),
+  companions: z.array(z.object({
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    idFrontFile: z.custom<File>(),
+    idBackFile: z.custom<File>(),
+  })),
+  paymentOption: z.enum(['deposit', 'full']),
+  paymentProofFile: z.custom<File>(),
+  acceptedTerms: z.literal(true),
 });
 
 
 export async function submitGuestData(bookingId: string, data: unknown) {
     try {
-        const validatedData = guestSchema.parse(data);
+        const validatedData = guestWizardSchema.parse(data);
+        const booking = await getBookingById(bookingId);
+        if (!booking) throw new Error("Booking not found");
 
-        // In a real app, you would handle file upload to Firebase Storage here
-        // and get back a URL. For now, we'll use a placeholder.
-        const idUrl = validatedData.idFile ? `/uploads/${bookingId}/${(validatedData.idFile as File).name}` : '#';
+        // 1. Upload all files
+        const idFrontUrl = await uploadFile(validatedData.guestData.idFrontFile);
+        const idBackUrl = await uploadFile(validatedData.guestData.idBackFile);
+        const paymentProofUrl = await uploadFile(validatedData.paymentProofFile);
 
-        const guestDataForDb = {
-            firstName: validatedData.firstName,
-            lastName: validatedData.lastName,
-            email: validatedData.email,
-            address: validatedData.address,
-            city: validatedData.city,
-            zip: validatedData.zip,
-            country: validatedData.country,
-            phone: validatedData.phone,
-            idUrl,
+        const companionUploads = await Promise.all(validatedData.companions.map(async (comp) => ({
+            ...comp,
+            idFrontUrl: await uploadFile(comp.idFrontFile),
+            idBackUrl: await uploadFile(comp.idBackFile),
+        })));
+
+        // 2. Prepare data for DB
+        const guestDataForDb: GuestData = {
+            ...validatedData.guestData,
+            idFrontUrl,
+            idBackUrl,
         };
+
+        const companionsForDb: Companion[] = companionUploads.map(comp => ({
+            firstName: comp.firstName,
+            lastName: comp.lastName,
+            idFrontUrl: comp.idFrontUrl,
+            idBackUrl: comp.idBackUrl,
+        }));
+
+        const totalPrice = booking.coreData.totalPrice;
+        const amountDue = validatedData.paymentOption === 'deposit' ? totalPrice * 0.3 : totalPrice;
         
-        // Assuming payment is confirmed upon data submission for this demo.
-        const updatedBooking = await dbUpdateBooking(bookingId, guestDataForDb, 'Confirmed');
+        const paymentDetailsForDb: PaymentDetails = {
+            paymentOption: validatedData.paymentOption,
+            amountDue: amountDue,
+            paymentProofUrl,
+        };
+
+        // 3. Update booking in DB
+        const updatedBooking = await dbUpdateBooking(bookingId, guestDataForDb, companionsForDb, paymentDetailsForDb);
 
         if (!updatedBooking) {
-            throw new Error('Booking not found');
+            throw new Error('Booking could not be updated');
         }
 
         const hotel = await getHotelById(updatedBooking.hotelId);
@@ -85,19 +138,18 @@ export async function submitGuestData(bookingId: string, data: unknown) {
             throw new Error('Hotel not found');
         }
 
-        // Trigger AI email generation
+        // 4. Trigger AI email generation
         const emailContent = await generateConfirmationEmail({
             hotelName: hotel.name,
             guestFirstName: updatedBooking.guestData!.firstName,
             guestLastName: updatedBooking.guestData!.lastName,
-            checkInDate: updatedBooking.prefillData.checkInDate,
-            checkOutDate: updatedBooking.prefillData.checkOutDate,
-            roomType: updatedBooking.prefillData.roomType,
+            checkInDate: updatedBooking.bookingPeriod.checkInDate,
+            checkOutDate: updatedBooking.bookingPeriod.checkOutDate,
+            roomType: updatedBooking.rooms.map(r => r.roomType).join(', '),
             bookingId: updatedBooking.id,
-            specialRequests: '', // This could be a field in the guest form
+            specialRequests: updatedBooking.guestData?.notes || '',
         });
 
-        // In a real app, you would use a service like SendGrid to send the email.
         console.log("---- AI-Generated Email ----");
         console.log("Subject:", emailContent.emailSubject);
         console.log("Body:", emailContent.emailBody);
@@ -105,11 +157,14 @@ export async function submitGuestData(bookingId: string, data: unknown) {
 
         revalidatePath(`/dashboard/${updatedBooking.hotelId}/bookings`);
         revalidatePath(`/dashboard/${updatedBooking.hotelId}/bookings/${bookingId}`);
-        revalidatePath(`/guest/${updatedBooking.linkId}/thank-you`);
+        revalidatePath(`/guest/${updatedBooking.bookingToken}/thank-you`);
 
         return { success: true };
     } catch (error) {
         console.error(error);
+         if (error instanceof z.ZodError) {
+            return { success: false, error: "Validierungsfehler: " + error.errors.map(e => e.path.join('.') + ': ' + e.message).join(', ') };
+        }
         return {
             success: false,
             error: 'Fehler beim Senden der Gästedaten.',
@@ -118,7 +173,7 @@ export async function submitGuestData(bookingId: string, data: unknown) {
 }
 
 
-export async function deleteBookingById(bookingId: string, hotelId: string) {
+export async function deleteBookingByIdAction(bookingId: string, hotelId: string) {
     try {
         const success = await dbDeleteBookingById(bookingId, hotelId);
         if (!success) {

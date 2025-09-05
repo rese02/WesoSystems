@@ -1,5 +1,8 @@
-import type { Booking, Hotel, GuestLink, BookingStatus } from './types';
-import { add, format } from 'date-fns';
+
+import type { Booking, Hotel, GuestLink, BookingStatus, GuestData, Companion, PaymentDetails, RoomConfiguration } from './types';
+import { add, format, formatISO } from 'date-fns';
+import { v4 as uuidv4 } from 'uuid';
+
 
 let hotels: Hotel[] = [
   { id: 'weso-hotel-1', name: 'WesoMountain Resort' },
@@ -10,148 +13,82 @@ let bookings: Booking[] = [
     id: 'booking-1',
     hotelId: 'weso-hotel-1',
     status: 'Confirmed',
-    prefillData: {
-      firstName: 'Alice',
-      lastName: 'Johnson',
-      email: 'alice@example.com',
-      roomType: 'Deluxe Suite',
-      checkInDate: format(new Date(), 'yyyy-MM-dd'),
-      checkOutDate: format(add(new Date(), { days: 5 }), 'yyyy-MM-dd'),
+    bookingToken: 'token-confirmed-123',
+    guestInfo: {
+        firstName: 'Alice',
+        lastName: 'Johnson',
     },
+    bookingPeriod: {
+        checkInDate: formatISO(new Date(), { representation: 'date' }),
+        checkOutDate: formatISO(add(new Date(), { days: 5 }), { representation: 'date' }),
+    },
+    coreData: {
+        catering: 'Frühstück',
+        totalPrice: 1250.00,
+        guestFormLanguage: 'de',
+    },
+    rooms: [{
+        roomType: 'Superior',
+        adults: 2,
+        children: 0,
+        infants: 0,
+        childrenAges: null,
+    }],
+    internalNotes: 'VIP Guest, requires late checkout.',
     guestData: {
       firstName: 'Alice',
       lastName: 'Johnson',
       email: 'alice@example.com',
-      address: '123 Alpine Way',
-      city: 'Mountain View',
-      zip: '94043',
-      country: 'USA',
       phone: '123-456-7890',
-      idUrl: '#',
+      age: 34,
+      idFrontUrl: '#',
+      idBackUrl: '#',
+      notes: 'Looking forward to our stay!',
     },
-    internalNotes: 'VIP Guest, requires late checkout.',
+    companions: [],
+    paymentDetails: {
+        paymentOption: 'full',
+        amountDue: 1250.00,
+        paymentProofUrl: '#',
+    },
     createdAt: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
-    linkId: 'link-1',
-    revenue: 1250.00,
   },
   {
     id: 'booking-2',
     hotelId: 'weso-hotel-1',
-    status: 'PendingPayment',
-    prefillData: {
-      firstName: 'Bob',
-      lastName: 'Smith',
-      email: 'bob@example.com',
-      roomType: 'Standard Room',
-      checkInDate: format(add(new Date(), { days: 1 }), 'yyyy-MM-dd'),
-      checkOutDate: format(add(new Date(), { days: 3 }), 'yyyy-MM-dd'),
+    status: 'Pending Guest Information',
+    bookingToken: 'token-pending-456',
+    guestInfo: {
+        firstName: 'Bob',
+        lastName: 'Smith',
     },
-    guestData: null,
+    bookingPeriod: {
+        checkInDate: formatISO(add(new Date(), { days: 1 }), { representation: 'date' }),
+        checkOutDate: formatISO(add(new Date(), { days: 3 }), { representation: 'date' }),
+    },
+    coreData: {
+        catering: 'Keine',
+        totalPrice: 450.00,
+        guestFormLanguage: 'en',
+    },
+    rooms: [{
+        roomType: 'Standard',
+        adults: 2,
+        children: 0,
+        infants: 0,
+        childrenAges: null,
+    }],
     internalNotes: 'Awaiting payment confirmation.',
+    guestData: null,
+    companions: [],
+    paymentDetails: null,
     createdAt: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString(),
-    linkId: 'link-2-guest',
-    revenue: 450.00,
-  },
-  {
-    id: 'booking-3',
-    hotelId: 'weso-hotel-1',
-    status: 'Sent',
-    prefillData: {
-      firstName: 'Charlie',
-      lastName: 'Brown',
-      email: 'charlie@example.com',
-      roomType: 'Family Room',
-      checkInDate: format(add(new Date(), { days: 10 }), 'yyyy-MM-dd'),
-      checkOutDate: format(add(new Date(), { days: 17 }), 'yyyy-MM-dd'),
-    },
-    guestData: null,
-    internalNotes: null,
-    createdAt: new Date().toISOString(),
-    linkId: 'link-3',
-    revenue: 2100.00,
-  },
-    {
-    id: 'booking-4',
-    hotelId: 'weso-hotel-1',
-    status: 'Cancelled',
-    prefillData: {
-      firstName: 'Diana',
-      lastName: 'Prince',
-      email: 'diana@example.com',
-      roomType: 'Deluxe Suite',
-      checkInDate: format(add(new Date(), { days: -20 }), 'yyyy-MM-dd'),
-      checkOutDate: format(add(new Date(), { days: -15 }), 'yyyy-MM-dd'),
-    },
-    guestData: null,
-    internalNotes: 'Cancelled due to travel changes.',
-    createdAt: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString(),
-    linkId: 'link-4',
-    revenue: 0,
-  },
-  {
-    id: 'booking-5',
-    hotelId: 'weso-hotel-1',
-    status: 'CheckedIn',
-    prefillData: {
-      firstName: 'Ethan',
-      lastName: 'Hunt',
-      email: 'ethan@example.com',
-      roomType: 'Penthouse',
-      checkInDate: format(add(new Date(), { days: -1 }), 'yyyy-MM-dd'),
-      checkOutDate: format(add(new Date(), { days: 4 }), 'yyyy-MM-dd'),
-    },
-    guestData: {
-        firstName: 'Ethan',
-        lastName: 'Hunt',
-        email: 'ethan@example.com',
-        address: 'Secret Location',
-        city: 'Langley',
-        zip: '20505',
-        country: 'USA',
-        phone: '007-007-0007',
-        idUrl: '#',
-    },
-    internalNotes: 'High-profile guest.',
-    createdAt: new Date(new Date().setDate(new Date().getDate() - 10)).toISOString(),
-    linkId: 'link-5',
-    revenue: 5000.00,
-  },
-];
-
-let guestLinks: GuestLink[] = [
-  {
-    id: 'link-1',
-    hotelId: 'weso-hotel-1',
-    bookingId: 'booking-1',
-    status: 'Used',
-    expiresAt: new Date(new Date().setDate(new Date().getDate() - 1)).toISOString(),
-  },
-  {
-    id: 'link-2-guest',
-    hotelId: 'weso-hotel-1',
-    bookingId: 'booking-2',
-    status: 'Active',
-    expiresAt: add(new Date(), { days: 3 }).toISOString(),
-  },
-  {
-    id: 'link-3',
-    hotelId: 'weso-hotel-1',
-    bookingId: 'booking-3',
-    status: 'Active',
-    expiresAt: add(new Date(), { days: 3 }).toISOString(),
-  },
-   {
-    id: 'link-invalid',
-    hotelId: 'weso-hotel-1',
-    bookingId: 'booking-x',
-    status: 'Expired',
-    expiresAt: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(),
   },
 ];
 
 
 // Simulate DB operations with latency
-const dbLatency = () => new Promise(resolve => setTimeout(resolve, Math.random() * 300 + 100));
+const dbLatency = () => new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
 
 export async function getHotelById(hotelId: string): Promise<Hotel | undefined> {
   await dbLatency();
@@ -162,16 +99,16 @@ export async function getBookingsByHotelId(hotelId: string, { query, status }: {
   await dbLatency();
   let hotelBookings = bookings.filter(b => b.hotelId === hotelId);
 
-  if (status) {
+  if (status && status !== 'all') {
     hotelBookings = hotelBookings.filter(b => b.status === status);
   }
 
   if (query) {
     const lowerCaseQuery = query.toLowerCase();
     hotelBookings = hotelBookings.filter(b => 
-      b.prefillData.firstName.toLowerCase().includes(lowerCaseQuery) ||
-      b.prefillData.lastName.toLowerCase().includes(lowerCaseQuery) ||
-      b.prefillData.email.toLowerCase().includes(lowerCaseQuery) ||
+      b.guestInfo.firstName.toLowerCase().includes(lowerCaseQuery) ||
+      b.guestInfo.lastName.toLowerCase().includes(lowerCaseQuery) ||
+      (b.guestData?.email || '').toLowerCase().includes(lowerCaseQuery) ||
       b.id.toLowerCase().includes(lowerCaseQuery)
     );
   }
@@ -179,59 +116,62 @@ export async function getBookingsByHotelId(hotelId: string, { query, status }: {
   return hotelBookings.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function getBookingById(bookingId: string, hotelId: string): Promise<Booking | undefined> {
+export async function getBookingById(bookingId: string): Promise<Booking | undefined> {
   await dbLatency();
-  return bookings.find(b => b.id === bookingId && b.hotelId === hotelId);
+  return bookings.find(b => b.id === bookingId);
 }
 
-export async function getLinkById(linkId: string): Promise<GuestLink | undefined> {
-  await dbLatency();
-  return guestLinks.find(l => l.id === linkId);
+export async function getBookingByToken(token: string): Promise<Booking | undefined> {
+    await dbLatency();
+    return bookings.find(b => b.bookingToken === token);
 }
 
-export async function createNewBooking(hotelId: string, prefillData: Booking['prefillData'], internalNotes: string | null): Promise<Booking> {
+type CreateBookingData = {
+    guestInfo: { firstName: string; lastName: string; };
+    bookingPeriod: { from: Date; to: Date; };
+    coreData: { catering: "Keine" | "Frühstück" | "Halbpension" | "Vollpension"; totalPrice: number; guestFormLanguage: "de" | "it" | "en"; };
+    rooms: RoomConfiguration[];
+    internalNotes: string | null;
+}
+
+export async function createNewBooking(hotelId: string, data: CreateBookingData): Promise<Booking> {
     await dbLatency();
     const newBookingId = `booking-${Date.now()}`;
-    const newLinkId = `link-${Date.now()}`;
+    const newBookingToken = uuidv4();
 
     const newBooking: Booking = {
         id: newBookingId,
         hotelId,
-        status: 'Sent',
-        prefillData,
+        status: 'Pending Guest Information',
+        bookingToken: newBookingToken,
+        guestInfo: data.guestInfo,
+        bookingPeriod: {
+            checkInDate: formatISO(data.bookingPeriod.from, { representation: 'date' }),
+            checkOutDate: formatISO(data.bookingPeriod.to, { representation: 'date' }),
+        },
+        coreData: data.coreData,
+        rooms: data.rooms,
+        internalNotes: data.internalNotes,
         guestData: null,
-        internalNotes,
+        companions: [],
+        paymentDetails: null,
         createdAt: new Date().toISOString(),
-        linkId: newLinkId,
-        revenue: 0, // Revenue is calculated later
-    };
-
-    const newLink: GuestLink = {
-        id: newLinkId,
-        hotelId,
-        bookingId: newBookingId,
-        status: 'Active',
-        expiresAt: add(new Date(), { hours: 72 }).toISOString(),
     };
     
     bookings.unshift(newBooking);
-    guestLinks.push(newLink);
     
     return newBooking;
 }
 
-export async function updateBookingWithGuestData(bookingId: string, guestData: NonNullable<Booking['guestData']>, newStatus: BookingStatus): Promise<Booking | undefined> {
+export async function updateBookingWithGuestData(bookingId: string, guestData: GuestData, companions: Companion[], paymentDetails: PaymentDetails): Promise<Booking | undefined> {
     await dbLatency();
     const bookingIndex = bookings.findIndex(b => b.id === bookingId);
     if (bookingIndex === -1) return undefined;
 
     bookings[bookingIndex].guestData = guestData;
-    bookings[bookingIndex].status = newStatus;
-
-    const linkIndex = guestLinks.findIndex(l => l.bookingId === bookingId);
-    if(linkIndex !== -1) {
-        guestLinks[linkIndex].status = 'Used';
-    }
+    bookings[bookingIndex].companions = companions;
+    bookings[bookingIndex].paymentDetails = paymentDetails;
+    bookings[bookingIndex].status = 'Confirmed';
 
     return bookings[bookingIndex];
 }
@@ -243,14 +183,14 @@ export async function getDashboardStats(hotelId: string) {
 
     const hotelBookings = bookings.filter(b => b.hotelId === hotelId);
 
-    const todaysArrivals = hotelBookings.filter(b => b.prefillData.checkInDate === today && (b.status === 'Confirmed' || b.status === 'CheckedIn')).length;
-    const todaysDepartures = hotelBookings.filter(b => b.prefillData.checkOutDate === today && b.status === 'CheckedIn').length;
+    const todaysArrivals = hotelBookings.filter(b => b.bookingPeriod.checkInDate === today && (b.status === 'Confirmed' || b.status === 'CheckedIn')).length;
+    const todaysDepartures = hotelBookings.filter(b => b.bookingPeriod.checkOutDate === today && b.status === 'CheckedIn').length;
     
     const revenueThisMonth = hotelBookings.reduce((acc, b) => {
         const bookingDate = new Date(b.createdAt);
         const firstOfMonthDate = new Date(firstDayOfMonth);
         if (bookingDate >= firstOfMonthDate && (b.status === 'Confirmed' || b.status === 'CheckedIn')) {
-            return acc + b.revenue;
+            return acc + b.coreData.totalPrice;
         }
         return acc;
     }, 0);

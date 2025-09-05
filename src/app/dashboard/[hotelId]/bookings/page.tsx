@@ -1,3 +1,4 @@
+
 import { getBookingsByHotelId } from "@/lib/data";
 import { BookingsClient } from "./client";
 import { Button } from "@/components/ui/button";

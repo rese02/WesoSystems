@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -31,24 +32,38 @@ import { format, parseISO } from 'date-fns';
 import { useDebounce } from '@/hooks/use-debounce';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-import { deleteBookingById } from '@/lib/actions';
+import { deleteBookingByIdAction } from '@/lib/actions';
 import { Card } from '@/components/ui/card';
 
 const statusColors: { [key in BookingStatus]: string } = {
+  'Pending Guest Information': 'bg-blue-100 text-blue-800 border-blue-200',
   Confirmed: 'bg-green-100 text-green-800 border-green-200',
-  PendingPayment: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  Sent: 'bg-blue-100 text-blue-800 border-blue-200',
   Cancelled: 'bg-red-100 text-red-800 border-red-200',
   CheckedIn: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-  CheckedOut: 'bg-gray-100 text-gray-800 border-gray-200'
+  CheckedOut: 'bg-gray-100 text-gray-800 border-gray-200',
+  // Keep old ones for safety
+  PendingPayment: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  Sent: 'bg-blue-100 text-blue-800 border-blue-200',
+};
+
+const statusTranslations: { [key in BookingStatus]: string } = {
+    'Pending Guest Information': 'Wartet auf Gast',
+    Confirmed: 'Bestätigt',
+    Cancelled: 'Storniert',
+    CheckedIn: 'Eingecheckt',
+    CheckedOut: 'Ausgecheckt',
+    // Keep old ones for safety
+    PendingPayment: 'Ausstehende Zahlung',
+    Sent: 'Link gesendet'
 };
 
 const statusTabs: { label: string, value: BookingStatus | 'all' }[] = [
     { label: 'Alle', value: 'all' },
+    { label: 'Wartet auf Gast', value: 'Pending Guest Information' },
     { label: 'Bestätigt', value: 'Confirmed' },
-    { label: 'Ausstehend', value: 'PendingPayment' },
-    { label: 'Gesendet', value: 'Sent' },
     { label: 'Storniert', value: 'Cancelled' },
+    { label: 'Eingecheckt', value: 'CheckedIn' },
+    { label: 'Ausgecheckt', value: 'CheckedOut' },
 ];
 
 export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hotelId: string }) {
@@ -64,7 +79,7 @@ export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hot
   const [bookingToDelete, setBookingToDelete] = React.useState<Booking | null>(null);
 
   React.useEffect(() => {
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams.toString());
     if (debouncedSearchTerm) {
       params.set('query', debouncedSearchTerm);
     } else {
@@ -74,7 +89,7 @@ export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hot
   }, [debouncedSearchTerm, pathname, router, searchParams]);
 
   const handleStatusChange = (status: string) => {
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams.toString());
     if (status === 'all') {
       params.delete('status');
     } else {
@@ -91,12 +106,12 @@ export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hot
   const confirmDelete = async () => {
     if (!bookingToDelete) return;
 
-    const result = await deleteBookingById(bookingToDelete.id, hotelId);
+    const result = await deleteBookingByIdAction(bookingToDelete.id, hotelId);
 
     if (result.success) {
         toast({
             title: "Buchung gelöscht",
-            description: `Die Buchung für ${bookingToDelete.prefillData.firstName} ${bookingToDelete.prefillData.lastName} wurde erfolgreich gelöscht.`,
+            description: `Die Buchung für ${bookingToDelete.guestInfo.firstName} ${bookingToDelete.guestInfo.lastName} wurde erfolgreich gelöscht.`,
         });
         router.refresh();
     } else {
@@ -127,7 +142,7 @@ export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hot
             </div>
         </div>
          <Tabs value={currentStatus} onValueChange={handleStatusChange}>
-            <TabsList>
+             <TabsList className="flex flex-wrap h-auto justify-start">
                 {statusTabs.map(tab => (
                     <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
                 ))}
@@ -150,15 +165,15 @@ export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hot
               bookings.map((booking) => (
                 <TableRow key={booking.id}>
                   <TableCell>
-                    <div className="font-medium">{booking.prefillData.firstName} {booking.prefillData.lastName}</div>
-                    <div className="text-sm text-muted-foreground">{booking.prefillData.email}</div>
+                    <div className="font-medium">{booking.guestInfo.firstName} {booking.guestInfo.lastName}</div>
+                    <div className="text-sm text-muted-foreground">{booking.guestData?.email}</div>
                   </TableCell>
                   <TableCell>
-                    {format(parseISO(booking.prefillData.checkInDate), 'dd.MM.yy')} - {format(parseISO(booking.prefillData.checkOutDate), 'dd.MM.yy')}
+                    {format(parseISO(booking.bookingPeriod.checkInDate), 'dd.MM.yy')} - {format(parseISO(booking.bookingPeriod.checkOutDate), 'dd.MM.yy')}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusColors[booking.status]}>
-                      {booking.status === 'PendingPayment' ? 'Ausstehend' : booking.status === 'Sent' ? 'Gesendet' : booking.status === 'Confirmed' ? 'Bestätigt' : booking.status === 'Cancelled' ? 'Storniert' : booking.status}
+                       {statusTranslations[booking.status] || booking.status}
                     </Badge>
                   </TableCell>
                   <TableCell>{format(parseISO(booking.createdAt), 'dd.MM.yyyy')}</TableCell>
@@ -194,14 +209,13 @@ export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hot
           </TableBody>
         </Table>
       </div>
-      {/* Pagination would go here */}
-       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
             <AlertDialogDescription>
               Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Buchung von
-              <span className="font-semibold"> {bookingToDelete?.prefillData.firstName} {bookingToDelete?.prefillData.lastName} </span>
+              <span className="font-semibold"> {bookingToDelete?.guestInfo.firstName} {bookingToDelete?.guestInfo.lastName} </span>
               dauerhaft gelöscht.
             </AlertDialogDescription>
           </AlertDialogHeader>

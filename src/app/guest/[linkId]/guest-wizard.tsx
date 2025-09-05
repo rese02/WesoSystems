@@ -1,7 +1,8 @@
+
 'use client';
 
 import * as React from 'react';
-import { useForm, FormProvider } from 'react-hook-form';
+import { useForm, FormProvider, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from "@/components/ui/button";
@@ -9,82 +10,125 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, Loader2, UploadCloud, File, Trash2, Banknote, ClipboardCopy } from "lucide-react";
-import type { Booking, Hotel } from '@/lib/types';
+import { ArrowLeft, ArrowRight, Loader2, UploadCloud, File, Trash2, Banknote, ClipboardCopy, UserPlus, X } from "lucide-react";
+import type { Booking, Hotel, RoomConfiguration } from '@/lib/types';
 import { submitGuestData } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format, parseISO, differenceInDays } from 'date-fns';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
 
-const MAX_STEPS = 4;
+const MAX_STEPS = 5;
 
-const guestSchema = z.object({
-  firstName: z.string().min(1, "Vorname ist erforderlich."),
-  lastName: z.string().min(1, "Nachname ist erforderlich."),
-  email: z.string().email("Ungültige E-Mail-Adresse."),
-  address: z.string().min(1, "Adresse ist erforderlich."),
-  city: z.string().min(1, "Stadt ist erforderlich."),
-  zip: z.string().min(1, "Postleitzahl ist erforderlich."),
-  country: z.string().min(1, "Land ist erforderlich."),
-  phone: z.string().min(1, "Telefonnummer ist erforderlich."),
-  idFile: z.any().refine(file => file instanceof File, "Bitte laden Sie eine Datei hoch.").optional(),
+const fileSchema = z.custom<File>(f => f instanceof File, "Bitte laden Sie eine Datei hoch.");
+
+const guestWizardSchema = z.object({
+  guestData: z.object({
+    firstName: z.string().min(1, "Vorname ist erforderlich."),
+    lastName: z.string().min(1, "Nachname ist erforderlich."),
+    email: z.string().email("Ungültige E-Mail-Adresse."),
+    phone: z.string().min(1, "Telefonnummer ist erforderlich."),
+    age: z.coerce.number().positive().optional().nullable(),
+    idFrontFile: fileSchema,
+    idBackFile: fileSchema,
+    notes: z.string().optional().nullable(),
+  }),
+  companions: z.array(z.object({
+    firstName: z.string().min(1, "Vorname ist erforderlich."),
+    lastName: z.string().min(1, "Nachname ist erforderlich."),
+    idFrontFile: fileSchema,
+    idBackFile: fileSchema,
+  })),
+  paymentOption: z.enum(['deposit', 'full'], { required_error: "Bitte wählen Sie eine Zahlungsoption." }),
+  paymentProofFile: fileSchema,
+  acceptedTerms: z.literal(true, {
+    errorMap: () => ({ message: "Sie müssen die AGB und Datenschutzbestimmungen akzeptieren." }),
+  }),
 });
 
-type GuestFormValues = z.infer<typeof guestSchema>;
+type GuestWizardFormValues = z.infer<typeof guestWizardSchema>;
 
-function useWizardForm(booking: Booking, linkId: string) {
-    const [step, setStep] = React.useState(1);
-    
-    const getInitialValues = () => {
-        if (typeof window !== 'undefined') {
-            const savedData = localStorage.getItem(`wizard-${linkId}`);
-            if (savedData) {
-                return JSON.parse(savedData);
-            }
-        }
-        return {
-            ...booking.prefillData,
-            address: '', city: '', zip: '', country: '', phone: '',
-        };
-    };
+const FileUploadField = ({ field, name }: { field: any, name: string }) => {
+    return (
+        <FormItem>
+            <FormLabel>{name}</FormLabel>
+            <FormControl>
+                <div className="relative flex justify-center items-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted">
+                    <Input
+                        type="file"
+                        className="absolute w-full h-full opacity-0 cursor-pointer"
+                        accept="image/jpeg,image/png,application/pdf"
+                        onChange={(e) => field.onChange(e.target.files ? e.target.files[0] : null)}
+                    />
+                    {!field.value ? (
+                        <div className="text-center text-muted-foreground p-2">
+                            <UploadCloud className="mx-auto h-6 w-6 mb-1" />
+                            <p className="text-xs">Datei auswählen</p>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center p-2">
+                            <File className="h-6 w-6 text-primary mb-1"/>
+                            <p className="text-xs font-semibold truncate max-w-full px-2">{field.value.name}</p>
+                        </div>
+                    )}
+                </div>
+            </FormControl>
+            <FormMessage />
+        </FormItem>
+    );
+};
 
-    const form = useForm<GuestFormValues>({
-        resolver: zodResolver(guestSchema),
-        defaultValues: getInitialValues(),
-    });
-
-    React.useEffect(() => {
-        const subscription = form.watch((value) => {
-            localStorage.setItem(`wizard-${linkId}`, JSON.stringify(value));
-        });
-        return () => subscription.unsubscribe();
-    }, [form.watch, linkId]);
-
-    return { form, step, setStep };
-}
 
 export function GuestWizard({ booking, hotel }: { booking: Booking; hotel: Hotel }) {
-  const { form, step, setStep } = useWizardForm(booking, booking.linkId);
+  const [step, setStep] = React.useState(1);
   const [isLoading, setIsLoading] = React.useState(false);
   const { toast } = useToast();
   const router = useRouter();
 
+  const form = useForm<GuestWizardFormValues>({
+    resolver: zodResolver(guestWizardSchema),
+    defaultValues: {
+      guestData: {
+        firstName: booking.guestInfo.firstName,
+        lastName: booking.guestInfo.lastName,
+        email: '',
+        phone: '',
+        age: null,
+        notes: '',
+      },
+      companions: [],
+      acceptedTerms: false,
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "companions",
+  });
+
   const nextStep = async () => {
-    const isValid = await form.trigger(["firstName", "lastName", "email", "address", "city", "zip", "country", "phone"]);
-    if(step === 1 && isValid) setStep(s => s + 1);
-    else if(step === 2) setStep(s => s + 1);
-    else if(step === 3) setStep(s => s + 1);
+    let isValid = false;
+    if (step === 1) isValid = await form.trigger(["guestData"]);
+    if (step === 2) isValid = await form.trigger(["companions"]);
+    if (step === 3) isValid = await form.trigger(["paymentOption"]);
+    if (step === 4) isValid = await form.trigger(["paymentProofFile"]);
+    
+    if (step === MAX_STEPS - 1 && !isValid) return;
+    
+    if (isValid || step < 4) {
+        setStep(s => s + 1);
+    }
   };
   const prevStep = () => setStep(s => s - 1);
   
-  const onSubmit = async (data: GuestFormValues) => {
+  const onSubmit = async (data: GuestWizardFormValues) => {
     setIsLoading(true);
     const result = await submitGuestData(booking.id, data);
     setIsLoading(false);
     
     if (result.success) {
-      localStorage.removeItem(`wizard-${booking.linkId}`);
-      router.push(`/guest/${booking.linkId}/thank-you`);
+      router.push(`/guest/${booking.bookingToken}/thank-you`);
     } else {
       toast({
         variant: 'destructive',
@@ -94,11 +138,22 @@ export function GuestWizard({ booking, hotel }: { booking: Booking; hotel: Hotel
     }
   };
 
-  const idFile = form.watch('idFile');
-
-  const checkIn = parseISO(booking.prefillData.checkInDate);
-  const checkOut = parseISO(booking.prefillData.checkOutDate);
+  const checkIn = parseISO(booking.bookingPeriod.checkInDate);
+  const checkOut = parseISO(booking.bookingPeriod.checkOutDate);
   const nights = differenceInDays(checkOut, checkIn);
+  const paymentOption = form.watch('paymentOption');
+  const totalPrice = booking.coreData.totalPrice;
+  const depositPrice = totalPrice * 0.3;
+  const amountDue = paymentOption === 'deposit' ? depositPrice : totalPrice;
+
+
+  const BookingSummary = () => (
+    <div className="text-sm bg-primary/10 p-3 rounded-lg mt-2 border border-primary/20 space-y-1">
+        <p><strong>Buchungsübersicht:</strong> {booking.rooms.map((r: RoomConfiguration) => r.roomType).join(', ')} für {nights} Nächte</p>
+        <p><strong>Zeitraum:</strong> {format(checkIn, 'dd. MMM yyyy')} - {format(checkOut, 'dd. MMM yyyy')}</p>
+        <p><strong>Gesamtpreis:</strong> €{totalPrice.toFixed(2)}</p>
+    </div>
+  );
 
   return (
     <Card className="w-full max-w-3xl shadow-2xl">
@@ -106,99 +161,132 @@ export function GuestWizard({ booking, hotel }: { booking: Booking; hotel: Hotel
         <Progress value={(step / MAX_STEPS) * 100} className="mb-4" />
         <CardTitle className="text-2xl font-headline">Vervollständigen Sie Ihre Buchung</CardTitle>
         <CardDescription>Willkommen bei {hotel.name}! Bitte füllen Sie die folgenden Schritte aus.</CardDescription>
-         <div className="text-sm bg-primary/10 p-3 rounded-lg mt-2 border border-primary/20">
-            <p><strong>Buchungsübersicht:</strong> {booking.prefillData.roomType} für {nights} Nächte</p>
-            <p><strong>Check-in:</strong> {format(checkIn, 'dd. MMM yyyy')}, <strong>Check-out:</strong> {format(checkOut, 'dd. MMM yyyy')}</p>
-        </div>
       </CardHeader>
       <FormProvider {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
-          <CardContent>
+          <CardContent className="min-h-[350px]">
             {step === 1 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField name="firstName" render={({ field }) => <FormItem><FormLabel>Vorname</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
-                <FormField name="lastName" render={({ field }) => <FormItem><FormLabel>Nachname</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
-                <FormField name="email" render={({ field }) => <FormItem className="md:col-span-2"><FormLabel>E-Mail</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>} />
-                <FormField name="address" render={({ field }) => <FormItem className="md:col-span-2"><FormLabel>Adresse</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
-                <FormField name="city" render={({ field }) => <FormItem><FormLabel>Stadt</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
-                <FormField name="zip" render={({ field }) => <FormItem><FormLabel>PLZ</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
-                <FormField name="country" render={({ field }) => <FormItem><FormLabel>Land</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
-                <FormField name="phone" render={({ field }) => <FormItem><FormLabel>Telefon</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Schritt 1: Ihre Daten</h3>
+                <BookingSummary />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <FormField control={form.control} name="guestData.firstName" render={({ field }) => <FormItem><FormLabel>Vorname</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="guestData.lastName" render={({ field }) => <FormItem><FormLabel>Nachname</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="guestData.email" render={({ field }) => <FormItem><FormLabel>E-Mail</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="guestData.phone" render={({ field }) => <FormItem><FormLabel>Telefon</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="guestData.age" render={({ field }) => <FormItem><FormLabel>Alter (optional)</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? null : +e.target.value)} /></FormControl><FormMessage /></FormItem>} />
+                  <div className="md:col-span-2 grid grid-cols-2 gap-4">
+                     <FormField control={form.control} name="guestData.idFrontFile" render={({ field }) => <FileUploadField field={field} name="Ausweis Vorderseite" />} />
+                     <FormField control={form.control} name="guestData.idBackFile" render={({ field }) => <FileUploadField field={field} name="Ausweis Rückseite" />} />
+                  </div>
+                  <FormField control={form.control} name="guestData.notes" render={({ field }) => <FormItem className="md:col-span-2"><FormLabel>Anmerkungen (optional)</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>} />
+                </div>
               </div>
             )}
             {step === 2 && (
-                <div>
-                    <h3 className="text-lg font-semibold mb-2">Dokumenten-Upload</h3>
-                    <p className="text-muted-foreground mb-4">Bitte laden Sie eine Kopie Ihres Personalausweises oder Reisepasses hoch.</p>
-                    <FormField
-                        control={form.control}
-                        name="idFile"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormControl>
-                                    <div className="relative flex justify-center items-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted">
-                                        <Input
-                                            type="file"
-                                            className="absolute w-full h-full opacity-0 cursor-pointer"
-                                            accept="image/jpeg,image/png,application/pdf"
-                                            onChange={(e) => field.onChange(e.target.files ? e.target.files[0] : null)}
-                                        />
-                                        {!idFile ? (
-                                            <div className="text-center text-muted-foreground">
-                                                <UploadCloud className="mx-auto h-10 w-10 mb-2" />
-                                                <p>Klicken oder ziehen Sie eine Datei hierher.</p>
-                                                <p className="text-xs">JPG, PNG, PDF (max. 5MB)</p>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col items-center">
-                                                <File className="h-10 w-10 text-primary mb-2"/>
-                                                <p className="font-semibold">{idFile.name}</p>
-                                                <Button variant="ghost" size="sm" className="mt-2 text-red-500 hover:text-red-700" onClick={() => form.setValue('idFile', undefined)}>
-                                                    <Trash2 className="h-4 w-4 mr-1"/> Entfernen
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Schritt 2: Mitreisende</h3>
+                {fields.map((field, index) => (
+                    <Card key={field.id} className="mb-4 relative">
+                        <CardHeader><CardTitle className="text-base">Mitreisender {index + 1}</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField control={form.control} name={`companions.${index}.firstName`} render={({ field }) => <FormItem><FormLabel>Vorname</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
+                            <FormField control={form.control} name={`companions.${index}.lastName`} render={({ field }) => <FormItem><FormLabel>Nachname</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
+                            <FormField control={form.control} name={`companions.${index}.idFrontFile`} render={({ field }) => <FileUploadField field={field} name="Ausweis Vorderseite" />} />
+                            <FormField control={form.control} name={`companions.${index}.idBackFile`} render={({ field }) => <FileUploadField field={field} name="Ausweis Rückseite" />} />
+                        </CardContent>
+                        <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2" onClick={() => remove(index)}><X className="h-4 w-4" /></Button>
+                    </Card>
+                ))}
+                <Button type="button" variant="outline" onClick={() => append({ firstName: '', lastName: '', idFrontFile: undefined, idBackFile: undefined })}>
+                    <UserPlus className="mr-2 h-4 w-4" /> Mitreisenden hinzufügen
+                </Button>
+              </div>
             )}
             {step === 3 && (
                 <div>
-                    <h3 className="text-lg font-semibold mb-2">Zahlung per Banküberweisung</h3>
-                    <p className="text-muted-foreground mb-4">Bitte überweisen Sie den Betrag auf das folgende Konto, um Ihre Buchung zu bestätigen.</p>
-                     <Card className="bg-muted/50">
-                        <CardContent className="pt-6 space-y-4">
-                            <div className="flex justify-between items-center"><span>Empfänger:</span><span className="font-mono">{hotel.name}</span></div>
-                            <div className="flex justify-between items-center"><span>IBAN:</span><span className="font-mono">DE89 3704 0044 0532 0130 00</span></div>
-                            <div className="flex justify-between items-center"><span>BIC:</span><span className="font-mono">COBADEFFXXX</span></div>
-                            <div className="flex justify-between items-center"><span>Betrag:</span><span className="font-mono">€ {booking.revenue.toFixed(2)}</span></div>
-                            <div className="flex justify-between items-center"><span>Verwendungszweck:</span><span className="font-mono">Buchung {booking.id}</span></div>
-                        </CardContent>
-                     </Card>
-                     <Button variant="outline" className="mt-4" onClick={() => { navigator.clipboard.writeText("DE89 3704 0044 0532 0130 00"); toast({title: "IBAN kopiert!"})}}><ClipboardCopy className="mr-2 h-4 w-4"/>IBAN kopieren</Button>
+                    <h3 className="text-lg font-semibold mb-2">Schritt 3: Zahlungsoption wählen</h3>
+                    <p className="text-muted-foreground mb-4">Wählen Sie, ob Sie eine Anzahlung oder den Gesamtbetrag leisten möchten.</p>
+                    <FormField control={form.control} name="paymentOption" render={({ field }) => (
+                        <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="space-y-2">
+                           <FormItem className="flex items-center space-x-3 space-y-0 border rounded-md p-4 has-[[data-state=checked]]:border-primary">
+                                <FormControl><RadioGroupItem value="deposit" /></FormControl>
+                                <FormLabel className="font-normal w-full">Anzahlung (30%): <span className="font-bold">€{depositPrice.toFixed(2)}</span></FormLabel>
+                           </FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0 border rounded-md p-4 has-[[data-state=checked]]:border-primary">
+                                <FormControl><RadioGroupItem value="full" /></FormControl>
+                                <FormLabel className="font-normal w-full">Gesamtbetrag (100%): <span className="font-bold">€{totalPrice.toFixed(2)}</span></FormLabel>
+                            </FormItem>
+                        </RadioGroup>
+                    )} />
+                    {paymentOption && <div className="mt-6 p-4 bg-accent/50 rounded-lg text-center"><p className="text-lg font-semibold">Zu zahlender Betrag: €{amountDue.toFixed(2)}</p></div>}
                 </div>
             )}
             {step === 4 && (
                 <div>
-                    <h3 className="text-lg font-semibold mb-2">Überprüfung und Abschluss</h3>
+                    <h3 className="text-lg font-semibold mb-2">Schritt 4: Zahlung & Nachweis</h3>
+                    <p className="text-muted-foreground mb-4">Bitte überweisen Sie den Betrag von <strong>€{amountDue.toFixed(2)}</strong> auf das folgende Konto und laden Sie einen Beleg hoch.</p>
+                     <Card className="bg-muted/50">
+                        <CardContent className="pt-6 space-y-4">
+                            <div className="flex justify-between items-center"><span>Empfänger:</span><span className="font-mono">Pradell GMBH</span></div>
+                            <div className="flex justify-between items-center"><span>IBAN:</span><span className="font-mono">DE89 3704 0044 0532 0130 00</span><Button size="icon" variant="ghost" onClick={() => { navigator.clipboard.writeText("DE89370400440532013000"); toast({title: "IBAN kopiert!"})}}><ClipboardCopy className="h-4 w-4"/></Button></div>
+                            <div className="flex justify-between items-center"><span>BIC:</span><span className="font-mono">COBADEFFXXX</span></div>
+                            <div className="flex justify-between items-center"><span>Verwendungszweck:</span><span className="font-mono">Buchung {booking.id} - {paymentOption === 'deposit' ? 'Anzahlung' : 'Gesamt'}</span><Button size="icon" variant="ghost" onClick={() => { navigator.clipboard.writeText(`Buchung ${booking.id} - ${paymentOption === 'deposit' ? 'Anzahlung' : 'Gesamt'}`); toast({title: "Verwendungszweck kopiert!"})}}><ClipboardCopy className="h-4 w-4"/></Button></div>
+                        </CardContent>
+                     </Card>
+                     <div className="mt-4">
+                        <FormField control={form.control} name="paymentProofFile" render={({ field }) => <FileUploadField field={field} name="Zahlungsbeleg hochladen" />} />
+                     </div>
+                </div>
+            )}
+            {step === 5 && (
+                <div>
+                    <h3 className="text-lg font-semibold mb-2">Schritt 5: Prüfung & Abschluss</h3>
                     <p className="text-muted-foreground mb-4">Bitte überprüfen Sie Ihre Angaben vor dem Absenden.</p>
-                    <div className="space-y-2 text-sm border p-4 rounded-md">
-                        <p><strong>Name:</strong> {form.getValues('firstName')} {form.getValues('lastName')}</p>
-                        <p><strong>E-Mail:</strong> {form.getValues('email')}</p>
-                        <p><strong>Adresse:</strong> {form.getValues('address')}, {form.getValues('zip')} {form.getValues('city')}, {form.getValues('country')}</p>
-                        <p><strong>Dokument:</strong> {idFile ? idFile.name : 'Nicht hochgeladen'}</p>
+                    <div className="space-y-4 text-sm border p-4 rounded-md max-h-80 overflow-y-auto">
+                        <h4 className="font-bold">Ihre Daten</h4>
+                        <p><strong>Name:</strong> {form.getValues('guestData.firstName')} {form.getValues('guestData.lastName')}</p>
+                        <p><strong>E-Mail:</strong> {form.getValues('guestData.email')}</p>
+                        <p><strong>Dokumente:</strong> {form.getValues('guestData.idFrontFile')?.name}, {form.getValues('guestData.idBackFile')?.name}</p>
+                        
+                        {form.getValues('companions').length > 0 && <h4 className="font-bold pt-2 border-t">Mitreisende</h4>}
+                        {form.getValues('companions').map((comp, i) => (
+                           <div key={i} className="pl-2 border-l-2">
+                             <p><strong>Name:</strong> {comp.firstName} {comp.lastName}</p>
+                             <p><strong>Dokumente:</strong> {comp.idFrontFile?.name}, {comp.idBackFile?.name}</p>
+                           </div>
+                        ))}
+
+                        <h4 className="font-bold pt-2 border-t">Zahlungsinformationen</h4>
+                        <p><strong>Gewählte Option:</strong> {form.getValues('paymentOption') === 'deposit' ? 'Anzahlung (30%)' : 'Gesamtbetrag (100%)'}</p>
+                        <p><strong>Zahlungsbeleg:</strong> {form.getValues('paymentProofFile')?.name}</p>
                     </div>
+                     <FormField
+                        control={form.control}
+                        name="acceptedTerms"
+                        render={({ field }) => (
+                          <FormItem className="mt-4">
+                             <div className="flex items-center space-x-2">
+                                <FormControl>
+                                    <input type="checkbox" checked={field.value} onChange={(e) => field.onChange(e.target.checked)} className="form-checkbox h-4 w-4 text-primary" />
+                                </FormControl>
+                                <FormLabel className="text-sm !mt-0">Ich akzeptiere die AGB und die Datenschutzbestimmungen.</FormLabel>
+                             </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                 </div>
             )}
           </CardContent>
           <CardFooter className="flex justify-between">
-            {step > 1 && <Button type="button" variant="outline" onClick={prevStep}><ArrowLeft className="mr-2 h-4 w-4" />Zurück</Button>}
-            {step < MAX_STEPS && <Button type="button" onClick={nextStep}>Weiter<ArrowRight className="ml-2 h-4 w-4" /></Button>}
-            {step === MAX_STEPS && <Button type="submit" disabled={isLoading}>{isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Senden...</> : 'Daten absenden & Buchung abschließen'}</Button>}
+            <div>
+                {step > 1 && <Button type="button" variant="outline" onClick={prevStep}><ArrowLeft className="mr-2 h-4 w-4" />Zurück</Button>}
+            </div>
+            <div>
+                {step < MAX_STEPS && <Button type="button" onClick={nextStep}>Weiter<ArrowRight className="ml-2 h-4 w-4" /></Button>}
+                {step === MAX_STEPS && <Button type="submit" disabled={isLoading || !form.getValues('acceptedTerms')}>{isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Senden...</> : 'Daten absenden & Buchung abschließen'}</Button>}
+            </div>
           </CardFooter>
         </form>
       </FormProvider>

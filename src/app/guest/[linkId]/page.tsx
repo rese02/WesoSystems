@@ -1,21 +1,24 @@
-import { getLinkById, getBookingById, getHotelById } from "@/lib/data";
+
+import { getBookingByToken, getHotelById } from "@/lib/data";
 import { redirect } from 'next/navigation';
 import { GuestWizard } from './guest-wizard';
 import { parseISO } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
+// The linkId is now the bookingToken
 export default async function GuestPage({ params }: { params: { linkId: string } }) {
-  const link = await getLinkById(params.linkId);
+  const bookingToken = params.linkId;
+  const booking = await getBookingByToken(bookingToken);
 
-  if (!link || link.status !== 'Active' || parseISO(link.expiresAt) < new Date()) {
+  // Simple check if booking exists and is pending guest info
+  if (!booking || booking.status !== 'Pending Guest Information') {
     redirect('/guest/invalid-link');
   }
 
-  const booking = await getBookingById(link.bookingId, link.hotelId);
-  const hotel = await getHotelById(link.hotelId);
+  const hotel = await getHotelById(booking.hotelId);
 
-  if (!booking || !hotel) {
+  if (!hotel) {
     redirect('/guest/invalid-link');
   }
 
