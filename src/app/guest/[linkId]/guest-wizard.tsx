@@ -183,7 +183,7 @@ export function GuestWizard({ booking, hotel }: { booking: Booking; hotel: Hotel
                      <FormField control={form.control} name="guestData.idFrontFile" render={({ field }) => <FileUploadField field={field} name={t.idFront} t={t} />} />
                      <FormField control={form.control} name="guestData.idBackFile" render={({ field }) => <FileUploadField field={field} name={t.idBack} t={t} />} />
                   </div>
-                  <FormField control={form.control} name="guestData.notes" render={({ field }) => <FormItem className="md:col-span-2"><FormLabel>{t.notes}</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>} />
+                  <FormField control={form.control} name="guestData.notes" render={({ field }) => <FormItem className="md:col-span-2"><FormLabel>{t.notes}</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormMessage>} />
                 </div>
               </div>
             )}
@@ -297,3 +297,5 @@ export function GuestWizard({ booking, hotel }: { booking: Booking; hotel: Hotel
     </Card>
   );
 }
+
+    

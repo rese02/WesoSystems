@@ -3,7 +3,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createNewBooking as dbCreateNewBooking, updateBookingWithGuestData as dbUpdateBooking, getHotelById, deleteBookingById as dbDeleteBookingById, getBookingById, updateBooking as dbUpdateBooking } from './data';
+import { 
+    createNewBooking as dbCreateNewBooking, 
+    updateBookingWithGuestData, 
+    getHotelById, 
+    deleteBookingById as dbDeleteBookingById, 
+    getBookingById, 
+    updateBooking as dbUpdateBooking 
+} from './data';
 import type { Booking, GuestData, Companion, PaymentDetails, RoomConfiguration, CateringOption, RoomType } from './types';
 import { generateConfirmationEmail } from '@/ai/flows/ai-powered-email-confirmation';
 // Assume a function to upload files to a storage service
@@ -158,7 +165,7 @@ export async function submitGuestData(bookingId: string, data: unknown) {
         };
 
         // 3. Update booking in DB
-        const updatedBooking = await dbUpdateBooking(bookingId, booking.hotelId, guestDataForDb, companionsForDb, paymentDetailsForDb);
+        const updatedBooking = await updateBookingWithGuestData(bookingId, booking.hotelId, guestDataForDb, companionsForDb, paymentDetailsForDb);
 
         if (!updatedBooking) {
             throw new Error('Booking could not be updated');
