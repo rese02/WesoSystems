@@ -1,6 +1,6 @@
 
 import type { Booking, Hotel, GuestLink, BookingStatus, GuestData, Companion, PaymentDetails, RoomConfiguration } from './types';
-import { add, format, formatISO } from 'date-fns';
+import { add, format, formatISO, parseISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
 
@@ -163,7 +163,30 @@ export async function createNewBooking(hotelId: string, data: CreateBookingData)
     return newBooking;
 }
 
-export async function updateBookingWithGuestData(bookingId: string, guestData: GuestData, companions: Companion[], paymentDetails: PaymentDetails): Promise<Booking | undefined> {
+export async function updateBooking(bookingId: string, hotelId: string, data: CreateBookingData): Promise<Booking | undefined> {
+    await dbLatency();
+    const bookingIndex = bookings.findIndex(b => b.id === bookingId && b.hotelId === hotelId);
+    if (bookingIndex === -1) return undefined;
+
+    const existingBooking = bookings[bookingIndex];
+
+    const updatedBooking: Booking = {
+        ...existingBooking,
+        guestInfo: data.guestInfo,
+        bookingPeriod: {
+            checkInDate: formatISO(data.bookingPeriod.from, { representation: 'date' }),
+            checkOutDate: formatISO(data.bookingPeriod.to, { representation: 'date' }),
+        },
+        coreData: data.coreData,
+        rooms: data.rooms,
+        internalNotes: data.internalNotes,
+    };
+
+    bookings[bookingIndex] = updatedBooking;
+    return updatedBooking;
+}
+
+export async function updateBookingWithGuestData(bookingId: string, hotelId: string, guestData: GuestData, companions: Companion[], paymentDetails: PaymentDetails): Promise<Booking | undefined> {
     await dbLatency();
     const bookingIndex = bookings.findIndex(b => b.id === bookingId);
     if (bookingIndex === -1) return undefined;

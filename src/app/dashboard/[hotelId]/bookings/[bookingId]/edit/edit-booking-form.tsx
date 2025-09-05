@@ -1,6 +1,6 @@
 
 'use client';
-import * as React from 'react';
+import *d React from 'react';
 import { useForm, FormProvider, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -26,22 +26,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Loader2, ArrowLeft, PlusCircle, Trash2, Copy, Check } from "lucide-react";
+import { CalendarIcon, Loader2, ArrowLeft, PlusCircle, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { de } from 'date-fns/locale';
-import { createBooking } from '@/lib/actions';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { updateBooking } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { cateringOptions, guestFormLanguages, roomTypes } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { cateringOptions, guestFormLanguages, roomTypes, type Booking } from '@/lib/types';
 
 
 const bookingFormSchema = z.object({
@@ -71,24 +64,34 @@ const bookingFormSchema = z.object({
   internalNotes: z.string().nullable().default(null),
 });
 
-type CreateBookingFormValues = z.infer<typeof bookingFormSchema>;
+type EditBookingFormValues = z.infer<typeof bookingFormSchema>;
 
-export default function CreateBookingPage() {
-  const params = useParams();
-  const hotelId = params.hotelId as string;
+export function EditBookingForm({ booking }: { booking: Booking }) {
   const [isLoading, setIsLoading] = React.useState(false);
-  const [generatedLink, setGeneratedLink] = React.useState<string | null>(null);
-  const [isCopied, setIsCopied] = React.useState(false);
   const { toast } = useToast();
   const router = useRouter();
 
-  const form = useForm<CreateBookingFormValues>({
+  const form = useForm<EditBookingFormValues>({
     resolver: zodResolver(bookingFormSchema),
     defaultValues: {
-      guestInfo: { firstName: '', lastName: '' },
-      coreData: { catering: 'Frühstück', totalPrice: 0, guestFormLanguage: 'de' },
-      rooms: [{ roomType: 'Standard', adults: 1, children: 0, infants: 0, childrenAges: '' }],
-      internalNotes: '',
+      guestInfo: { 
+        firstName: booking.guestInfo.firstName, 
+        lastName: booking.guestInfo.lastName 
+      },
+      bookingPeriod: {
+        from: parseISO(booking.bookingPeriod.checkInDate),
+        to: parseISO(booking.bookingPeriod.checkOutDate)
+      },
+      coreData: { 
+        catering: booking.coreData.catering,
+        totalPrice: booking.coreData.totalPrice,
+        guestFormLanguage: booking.coreData.guestFormLanguage
+      },
+      rooms: booking.rooms.map(room => ({
+          ...room,
+          childrenAges: room.childrenAges ?? ''
+      })),
+      internalNotes: booking.internalNotes ?? '',
     }
   });
 
@@ -97,48 +100,37 @@ export default function CreateBookingPage() {
     name: "rooms"
   });
 
-  const onSubmit = async (data: CreateBookingFormValues) => {
+  const onSubmit = async (data: EditBookingFormValues) => {
     setIsLoading(true);
-    const result = await createBooking(hotelId, data);
+    const result = await updateBooking(booking.id, booking.hotelId, data);
     setIsLoading(false);
 
-    if (result.success && result.booking) {
-      const baseUrl = window.location.origin;
-      setGeneratedLink(`${baseUrl}/guest/${result.booking.bookingToken}`);
+    if (result.success) {
+      toast({
+        title: 'Buchung aktualisiert',
+        description: `Die Buchung für ${result.booking?.guestInfo.firstName} ${result.booking?.guestInfo.lastName} wurde erfolgreich gespeichert.`,
+      });
+      router.push(`/dashboard/${booking.hotelId}/bookings/${booking.id}`);
     } else {
       toast({
         variant: 'destructive',
-        title: 'Fehler beim Erstellen der Buchung',
+        title: 'Fehler beim Aktualisieren der Buchung',
         description: result.error || 'Ein unbekannter Fehler ist aufgetreten.',
       });
     }
   };
-  
-  const copyToClipboard = () => {
-    if (generatedLink) {
-        navigator.clipboard.writeText(generatedLink);
-        setIsCopied(true);
-        setTimeout(() => setIsCopied(false), 2000);
-        toast({ title: "Link in Zwischenablage kopiert!" });
-    }
-  }
-
-  const handleDialogClose = () => {
-    setGeneratedLink(null);
-    router.push(`/dashboard/${hotelId}/bookings`);
-  }
 
   return (
     <>
       <div className="flex items-center gap-4 mb-6">
-        <Link href={`/dashboard/${hotelId}/bookings`}>
+        <Link href={`/dashboard/${booking.hotelId}/bookings/${booking.id}`}>
             <Button variant="outline" size="icon">
                 <ArrowLeft className="h-4 w-4" />
             </Button>
         </Link>
         <div>
-            <h1 className="text-3xl font-bold tracking-tight font-headline">Neue Buchung erstellen</h1>
-            <p className="text-muted-foreground">Füllen Sie die Details aus, um eine Buchung zu erstellen und einen Gast-Link zu generieren.</p>
+            <h1 className="text-3xl font-bold tracking-tight font-headline">Buchung bearbeiten</h1>
+            <p className="text-muted-foreground">Ändern Sie die Details für Buchung #{booking.id.split('-')[1]}</p>
         </div>
       </div>
       <FormProvider {...form}>
@@ -205,7 +197,7 @@ export default function CreateBookingPage() {
             <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                     <CardTitle>Zimmerkonfiguration</CardTitle>
-                    <CardDescription>Fügen Sie die für diese Buchung benötigten Zimmer hinzu.</CardDescription>
+                    <CardDescription>Bearbeiten Sie die für diese Buchung benötigten Zimmer.</CardDescription>
                 </div>
                 <Button type="button" size="sm" variant="outline" onClick={() => append({ roomType: 'Standard', adults: 1, children: 0, infants: 0, childrenAges: '' })}>
                     <PlusCircle className="mr-2 h-4 w-4"/> Zimmer hinzufügen
@@ -219,7 +211,7 @@ export default function CreateBookingPage() {
                                 <FormLabel>Zimmertyp</FormLabel>
                                 <Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Typ wählen" /></SelectTrigger></FormControl>
                                     <SelectContent>
-                                       {roomTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                                        {roomTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                                     </SelectContent>
                                 </Select><FormMessage />
                             </FormItem>
@@ -251,28 +243,12 @@ export default function CreateBookingPage() {
              </CardContent>
              <CardFooter className="flex justify-end">
                 <Button type="submit" disabled={isLoading}>
-                    {isLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Wird erstellt...</>) : ('Buchung erstellen & Link generieren')}
+                    {isLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Wird gespeichert...</>) : ('Änderungen speichern')}
                 </Button>
             </CardFooter>
           </Card>
         </form>
       </FormProvider>
-      <Dialog open={!!generatedLink} onOpenChange={(open) => !open && handleDialogClose()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Buchung erfolgreich erstellt!</DialogTitle>
-            <DialogDescription>
-              Der einzigartige Link für den Gast wurde generiert. Senden Sie diesen Link an den Gast, damit er seine Daten vervollständigen kann.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center space-x-2 mt-4">
-            <Input value={generatedLink || ''} readOnly className="flex-1"/>
-            <Button type="button" size="icon" onClick={copyToClipboard}>
-              {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MoreHorizontal, Search, Trash2, Eye } from 'lucide-react';
+import { MoreHorizontal, Search, Trash2, Eye, Pencil } from 'lucide-react';
 import type { Booking, BookingStatus } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -113,7 +113,6 @@ export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hot
             title: "Buchung gelöscht",
             description: `Die Buchung für ${bookingToDelete.guestInfo.firstName} ${bookingToDelete.guestInfo.lastName} wurde erfolgreich gelöscht.`,
         });
-        router.refresh();
     } else {
         toast({
             variant: "destructive",
@@ -189,6 +188,9 @@ export function BookingsClient({ bookings, hotelId }: { bookings: Booking[], hot
                         <DropdownMenuLabel>Aktionen</DropdownMenuLabel>
                         <DropdownMenuItem asChild>
                            <Link href={`/dashboard/${hotelId}/bookings/${booking.id}`}><Eye className="mr-2 h-4 w-4" />Details ansehen</Link>
+                        </DropdownMenuItem>
+                         <DropdownMenuItem asChild>
+                           <Link href={`/dashboard/${hotelId}/bookings/${booking.id}/edit`}><Pencil className="mr-2 h-4 w-4" />Buchung bearbeiten</Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleDeleteClick(booking)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">

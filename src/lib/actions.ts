@@ -3,8 +3,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createNewBooking as dbCreateNewBooking, updateBookingWithGuestData as dbUpdateBooking, getHotelById, deleteBookingById as dbDeleteBookingById, getBookingById } from './data';
-import type { Booking, GuestData, Companion, PaymentDetails, RoomConfiguration } from './types';
+import { createNewBooking as dbCreateNewBooking, updateBookingWithGuestData as dbUpdateBooking, getHotelById, deleteBookingById as dbDeleteBookingById, getBookingById, updateBooking as dbUpdateBooking } from './data';
+import type { Booking, GuestData, Companion, PaymentDetails, RoomConfiguration, CateringOption, RoomType } from './types';
 import { generateConfirmationEmail } from '@/ai/flows/ai-powered-email-confirmation';
 // Assume a function to upload files to a storage service
 // In a real app, this would upload to Firebase Storage, S3, etc.
@@ -15,7 +15,15 @@ async function uploadFile(file: File): Promise<string> {
     return `/uploads/mock/${Date.now()}-${file.name}`;
 }
 
-const createBookingSchema = z.object({
+const roomSchema = z.object({
+  roomType: z.enum(["Standard", "Familienzimmer", "Komfort", "Superior", "Economy"]),
+  adults: z.coerce.number().min(1, "Mindestens ein Erwachsener pro Zimmer."),
+  children: z.coerce.number().min(0),
+  infants: z.coerce.number().min(0),
+  childrenAges: z.string().nullable(),
+});
+
+const bookingFormSchema = z.object({
   guestInfo: z.object({
     firstName: z.string().min(1, "Vorname ist erforderlich"),
     lastName: z.string().min(1, "Nachname ist erforderlich"),
@@ -23,26 +31,23 @@ const createBookingSchema = z.object({
   bookingPeriod: z.object({
       from: z.date({ required_error: "Anreisedatum ist erforderlich." }),
       to: z.date({ required_error: "Abreisedatum ist erforderlich." }),
+  }).refine(data => data.to > data.from, {
+    message: "Abreisedatum muss nach dem Anreisedatum liegen.",
+    path: ["to"],
   }),
   coreData: z.object({
       catering: z.enum(["Keine", "Frühstück", "Halbpension", "Vollpension"]),
       totalPrice: z.coerce.number().positive("Preis muss positiv sein."),
       guestFormLanguage: z.enum(['de', 'it', 'en']),
   }),
-  rooms: z.array(z.object({
-      roomType: z.enum(["Standard", "Familienzimmer", "Komfort", "Superior", "Economy"]),
-      adults: z.coerce.number().min(1, "Mindestens ein Erwachsener pro Zimmer."),
-      children: z.coerce.number().min(0),
-      infants: z.coerce.number().min(0),
-      childrenAges: z.string().nullable(),
-  })).min(1, "Mindestens ein Zimmer muss hinzugefügt werden."),
+  rooms: z.array(roomSchema).min(1, "Mindestens ein Zimmer muss hinzugefügt werden."),
   internalNotes: z.string().nullable(),
 });
 
 
 export async function createBooking(hotelId: string, data: unknown) {
   try {
-    const validatedData = createBookingSchema.parse(data);
+    const validatedData = bookingFormSchema.parse(data);
     const newBooking = await dbCreateNewBooking(hotelId, validatedData);
     
     revalidatePath(`/dashboard/${hotelId}/bookings`);
@@ -63,16 +68,40 @@ export async function createBooking(hotelId: string, data: unknown) {
   }
 }
 
+export async function updateBooking(bookingId: string, hotelId: string, data: unknown) {
+  try {
+    const validatedData = bookingFormSchema.parse(data);
+    const updatedBooking = await dbUpdateBooking(bookingId, hotelId, validatedData);
+    
+    revalidatePath(`/dashboard/${hotelId}/bookings`);
+    revalidatePath(`/dashboard/${hotelId}/bookings/${bookingId}`);
+
+    return {
+      success: true,
+      booking: updatedBooking,
+    };
+  } catch (error) {
+    console.error(error);
+    if (error instanceof z.ZodError) {
+        return { success: false, error: "Validierungsfehler: " + error.errors.map(e => e.path.join('.') + ': ' + e.message).join(', ') };
+    }
+    return {
+      success: false,
+      error: 'Fehler beim Aktualisieren der Buchung.',
+    };
+  }
+}
+
 const guestWizardSchema = z.object({
   guestData: z.object({
     firstName: z.string().min(1),
     lastName: z.string().min(1),
     email: z.string().email(),
     phone: z.string().min(1),
-    age: z.number().nullable(),
+    age: z.coerce.number().positive().optional().nullable(),
     idFrontFile: z.custom<File>(),
     idBackFile: z.custom<File>(),
-    notes: z.string().nullable(),
+    notes: z.string().optional().nullable(),
   }),
   companions: z.array(z.object({
     firstName: z.string().min(1),
@@ -106,6 +135,8 @@ export async function submitGuestData(bookingId: string, data: unknown) {
         // 2. Prepare data for DB
         const guestDataForDb: GuestData = {
             ...validatedData.guestData,
+            age: validatedData.guestData.age ?? null,
+            notes: validatedData.guestData.notes ?? null,
             idFrontUrl,
             idBackUrl,
         };
@@ -127,7 +158,7 @@ export async function submitGuestData(bookingId: string, data: unknown) {
         };
 
         // 3. Update booking in DB
-        const updatedBooking = await dbUpdateBooking(bookingId, guestDataForDb, companionsForDb, paymentDetailsForDb);
+        const updatedBooking = await dbUpdateBooking(bookingId, booking.hotelId, guestDataForDb, companionsForDb, paymentDetailsForDb);
 
         if (!updatedBooking) {
             throw new Error('Booking could not be updated');

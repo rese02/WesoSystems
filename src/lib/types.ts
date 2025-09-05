@@ -30,8 +30,21 @@ export type PaymentDetails = {
   paymentProofUrl: string;
 };
 
+export type RoomType = 'Standard' | 'Familienzimmer' | 'Komfort' | 'Superior' | 'Economy';
+
+export const roomTypes: RoomType[] = ["Standard", "Familienzimmer", "Komfort", "Superior", "Economy"];
+
+export type CateringOption = "Keine" | "Frühstück" | "Halbpension" | "Vollpension";
+
+export const cateringOptions: CateringOption[] = ["Keine", "Frühstück", "Halbpension", "Vollpension"];
+
+export type GuestFormLanguage = 'de' | 'it' | 'en';
+
+export const guestFormLanguages: GuestFormLanguage[] = ['de', 'it', 'en'];
+
+
 export type RoomConfiguration = {
-    roomType: 'Standard' | 'Familienzimmer' | 'Komfort' | 'Superior' | 'Economy';
+    roomType: RoomType;
     adults: number;
     children: number;
     infants: number;
@@ -54,9 +67,9 @@ export type Booking = {
     checkOutDate: string;
   };
   coreData: {
-    catering: 'Keine' | 'Frühstück' | 'Halbpension' | 'Vollpension';
+    catering: CateringOption;
     totalPrice: number;
-    guestFormLanguage: 'de' | 'it' | 'en';
+    guestFormLanguage: GuestFormLanguage;
   };
   rooms: RoomConfiguration[];
   internalNotes: string | null;
@@ -75,4 +88,58 @@ export type GuestLink = {
   bookingId: string;
   status: 'Active' | 'Used' | 'Expired';
   expiresAt: string;
+};
+
+
+export type Translations = {
+  wizardTitle: string;
+  wizardDescription: (hotelName: string) => string;
+  step1Title: string;
+  bookingSummary: string;
+  nights: string;
+  period: string;
+  totalPrice: string;
+  step1Subtitle: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  age: string;
+  idFront: string;
+  idBack: string;
+  notes: string;
+  step2Title: string;
+  companion: string;
+  addCompanion: string;
+  step3Title: string;
+  step3Description: string;
+  depositOption: (amount: string) => string;
+  fullOption: (amount: string) => string;
+  amountDue: string;
+  step4Title: string;
+  step4Description: (amount: string) => string;
+  accountHolder: string;
+  iban: string;
+  bic: string;
+  reference: string;
+  referenceText: (bookingId: string, type: string) => string;
+  paymentProof: string;
+  fileSelect: string;
+  step5Title: string;
+  step5Description: string;
+  summaryYourData: string;
+  summaryName: string;
+  summaryDocs: string;
+  summaryCompanions: string;
+  summaryPaymentInfo: string;
+  summaryPaymentOption: string;
+  summaryPaymentProof: string;
+  acceptTerms: string;
+  submitButton: string;
+  backButton: string;
+agb: string;
+and: string;
+privacy: string;
+  nextButton: string;
+  copied: string;
 };
