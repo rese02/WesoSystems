@@ -23,15 +23,21 @@ const storage = getStorage(app); // Verbindung zum Cloud Storage
 // Server-seitige Admin-SDK-Initialisierung (für sichere Aktionen)
 if (!admin.apps.length) {
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        // Das ?.replace behebt ein häufiges Problem bei der Verarbeitung von Environment-Variablen
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    });
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+    if (!privateKey || !clientEmail) {
+      console.warn("Firebase Admin credentials (private key or client email) are not set. Server-side actions may fail.");
+    } else {
+        admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+            clientEmail: clientEmail,
+            privateKey: privateKey,
+          }),
+          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+        });
+    }
   } catch (error) {
     console.error('Firebase Admin Initialization Error:', error);
   }
