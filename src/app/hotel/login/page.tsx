@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -70,7 +71,7 @@ export default function HotelLoginPage() {
     <main className="flex min-h-screen flex-col items-center justify-center p-4">
       <div className="flex items-center gap-3 mb-6">
         <Hotel className="h-10 w-10 text-primary" />
-        <h1 className="text-4xl font-headline font-bold">Weso<span className="text-primary">Wizard</span></h1>
+        <h1 className="text-4xl font-headline font-bold">Weso<span className="text-primary">Systems</span></h1>
       </div>
       <Card className="w-full max-w-sm shadow-xl">
         <CardHeader>

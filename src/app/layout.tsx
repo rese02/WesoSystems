@@ -1,10 +1,11 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  title: 'WesoWizard',
+  title: 'WesoSystems',
   description: 'Smarte Buchungsverwaltung für Hotels',
 };
 

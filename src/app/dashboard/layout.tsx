@@ -1,3 +1,4 @@
+
 'use client';
 import * as React from 'react';
 import Link from 'next/link';
@@ -52,7 +53,7 @@ export default function DashboardLayout({
         <SidebarHeader className="items-center justify-center text-center">
             <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
                 <Hotel className="h-6 w-6 text-primary" />
-                <h2 className="font-bold text-lg font-headline">WesoWizard</h2>
+                <h2 className="font-bold text-lg font-headline">WesoSystems</h2>
             </div>
              <div className="hidden items-center gap-2 group-data-[collapsible=icon]:flex">
                 <Hotel className="h-6 w-6 text-primary" />
