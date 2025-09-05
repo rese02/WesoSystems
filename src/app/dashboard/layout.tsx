@@ -62,18 +62,15 @@ export default function DashboardLayout({
           <SidebarMenu>
             {menuItems.map((item) => (
               <SidebarMenuItem key={item.href}>
-                <Link href={item.href} legacyBehavior passHref>
-                  <SidebarMenuButton
-                    isActive={pathname === item.href}
-                    tooltip={item.tooltip}
-                    asChild
-                  >
-                    <a>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </Link>
+                <SidebarMenuButton
+                  as={Link}
+                  href={item.href}
+                  isActive={pathname === item.href}
+                  tooltip={item.tooltip}
+                >
+                  <item.icon />
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
@@ -89,14 +86,12 @@ export default function DashboardLayout({
                     <span className="text-xs text-muted-foreground">WesoMountain Resort</span>
                 </div>
             </div>
-            <Link href="/hotel/login" legacyBehavior passHref>
-                <Button variant="ghost" className="justify-start w-full mt-2" asChild>
-                    <a>
-                        <LogOut className="mr-2" />
-                        <span className="group-data-[collapsible=icon]:hidden">Abmelden</span>
-                    </a>
-                </Button>
-            </Link>
+            <Button variant="ghost" className="justify-start w-full mt-2" asChild>
+                <Link href="/hotel/login">
+                    <LogOut className="mr-2" />
+                    <span className="group-data-[collapsible=icon]:hidden">Abmelden</span>
+                </Link>
+            </Button>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
