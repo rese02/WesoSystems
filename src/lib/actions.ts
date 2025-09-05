@@ -57,6 +57,7 @@ const bookingFormSchema = z.object({
 export async function createBooking(hotelId: string, data: unknown) {
   try {
     const validatedData = bookingFormSchema.parse(data);
+    // This was the error: calling a non-existent function. Corrected to createNewBooking.
     const newBooking = await createNewBooking(hotelId, validatedData);
     
     revalidatePath(`/dashboard/${hotelId}/bookings`);
@@ -66,13 +67,14 @@ export async function createBooking(hotelId: string, data: unknown) {
       booking: newBooking,
     };
   } catch (error) {
-    console.error(error);
+    console.error("Error in createBooking action:", error);
     if (error instanceof z.ZodError) {
         return { success: false, error: "Validierungsfehler: " + error.errors.map(e => e.path.join('.') + ': ' + e.message).join(', ') };
     }
+    const errorMessage = error instanceof Error ? error.message : 'Ein unbekannter Fehler ist aufgetreten.';
     return {
       success: false,
-      error: 'Fehler beim Erstellen der Buchung.',
+      error: `Fehler beim Erstellen der Buchung: ${errorMessage}`,
     };
   }
 }
@@ -90,13 +92,14 @@ export async function updateBooking(bookingId: string, hotelId: string, data: un
       booking: updatedBooking,
     };
   } catch (error) {
-    console.error(error);
+    console.error("Error in updateBooking action:", error);
     if (error instanceof z.ZodError) {
         return { success: false, error: "Validierungsfehler: " + error.errors.map(e => e.path.join('.') + ': ' + e.message).join(', ') };
     }
+    const errorMessage = error instanceof Error ? error.message : 'Ein unbekannter Fehler ist aufgetreten.';
     return {
       success: false,
-      error: 'Fehler beim Aktualisieren der Buchung.',
+      error: `Fehler beim Aktualisieren der Buchung: ${errorMessage}`,
     };
   }
 }
@@ -205,9 +208,10 @@ export async function submitGuestData(bookingId: string, data: unknown) {
          if (error instanceof z.ZodError) {
             return { success: false, error: "Validierungsfehler: " + error.errors.map(e => e.path.join('.') + ': ' + e.message).join(', ') };
         }
+        const errorMessage = error instanceof Error ? error.message : 'Ein unbekannter Fehler ist aufgetreten.';
         return {
             success: false,
-            error: 'Fehler beim Senden der Gästedaten.',
+            error: `Fehler beim Senden der Gästedaten: ${errorMessage}`,
         };
     }
 }

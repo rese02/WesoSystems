@@ -1,12 +1,12 @@
 import { db } from './firebase';
 import { collection, query as firestoreQuery, where, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, orderBy, limit } from 'firebase/firestore';
-import type { Booking, Hotel, BookingStatus, GuestData, Companion, PaymentDetails, RoomConfiguration } from './types';
+import type { Booking, Hotel, BookingStatus, GuestData, Companion, PaymentDetails, RoomConfiguration, CateringOption, GuestFormLanguage } from './types';
 import { formatISO } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
 // HINWEIS: Die Hotel-Daten werden vorerst hartcodiert, da es keine UI zur Verwaltung gibt.
 const hotels: Hotel[] = [
-  { id: 'weso-hotel-1', name: 'WesoMountain Resort' },
+  { id: 'weso-hotel-1', name: 'WesoSystems Resort' },
 ];
 
 export async function getHotelById(hotelId: string): Promise<Hotel | undefined> {
@@ -69,7 +69,7 @@ export async function getBookingByToken(token: string): Promise<Booking | undefi
 type CreateBookingData = {
     guestInfo: { firstName: string; lastName: string; };
     bookingPeriod: { from: Date; to: Date; };
-    coreData: { catering: "Keine" | "Frühstück" | "Halbpension" | "Vollpension"; totalPrice: number; guestFormLanguage: "de" | "it" | "en"; };
+    coreData: { catering: CateringOption; totalPrice: number; guestFormLanguage: GuestFormLanguage; };
     rooms: RoomConfiguration[];
     internalNotes: string | null;
 }
@@ -150,7 +150,7 @@ export async function getDashboardStats(hotelId: string) {
     
     const revenueThisMonth = allBookings.reduce((acc, b) => {
         const bookingDate = new Date(b.createdAt);
-        if (bookingDate >= startOfMonth && (b.status === 'Confirmed' || b.status === 'CheckedIn')) {
+        if (bookingDate >= startOfMonth && (b.status === 'Confirmed' || b.status === 'CheckedIn' || b.status === 'CheckedOut')) {
             return acc + b.coreData.totalPrice;
         }
         return acc;
