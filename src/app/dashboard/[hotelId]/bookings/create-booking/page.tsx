@@ -68,6 +68,17 @@ export default function CreateBookingPage() {
 
   const form = useForm<CreateBookingFormValues>({
     resolver: zodResolver(createBookingSchema),
+    defaultValues: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      roomType: '',
+      internalNotes: '',
+      dates: {
+        from: undefined,
+        to: undefined
+      }
+    }
   });
 
   const onSubmit = async (data: CreateBookingFormValues) => {
