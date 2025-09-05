@@ -57,7 +57,6 @@ const bookingFormSchema = z.object({
 export async function createBooking(hotelId: string, data: unknown) {
   try {
     const validatedData = bookingFormSchema.parse(data);
-    // This was the error: calling a non-existent function. Corrected to createNewBooking.
     const newBooking = await createNewBooking(hotelId, validatedData);
     
     revalidatePath(`/dashboard/${hotelId}/bookings`);
