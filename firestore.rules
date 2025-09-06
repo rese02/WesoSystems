@@ -1,10 +1,32 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /bookings/{bookingId} {
-      // Erlaube angemeldeten Benutzern das Lesen und Erstellen.
-      // Später kann dies weiter eingeschränkt werden, z.B. nur auf den Hotelbesitzer.
-      allow read, write: if request.auth != null;
+    
+    // Helper function to check if a user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
     }
+
+    // Rules for the 'bookings' collection
+    match /bookings/{bookingId} {
+      // Anyone who is authenticated can create a booking.
+      // Anyone who is authenticated can read their own bookings.
+      // In a real app, you would restrict read access further,
+      // e.g., only the user who owns the booking or an admin can read it.
+      allow read, create: if isSignedIn();
+
+      // Only an authenticated user can update or delete a booking.
+      // In a real app, you'd add a check to ensure it's the booking owner or an admin.
+      // For example: allow update: if isSignedIn() && request.auth.uid == resource.data.userId;
+      allow update, delete: if isSignedIn();
+    }
+
+    // You can add rules for other collections here.
+    // For example, a 'hotels' collection might be publicly readable.
+    // match /hotels/{hotelId} {
+    //   allow read: if true;
+    //   allow write: if isSignedIn(); // Only admins should write
+    // }
   }
 }
